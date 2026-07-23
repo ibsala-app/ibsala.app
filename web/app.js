@@ -1,7 +1,7 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js'
 
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
+// supabase-js chega via bundle UMD (script defer no index) — 1 request, cache longo
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── Slots (portado do v1) ────────────────────────────────────────────────────
 const SLOTS = {

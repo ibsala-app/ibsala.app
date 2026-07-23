@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-1'
+const CACHE = 'ibsala-v5-2'
 const SHELL = ['/', '/style.css', '/app.js', '/config.js', '/manifest.json',
   '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.svg']
 
