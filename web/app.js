@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js'
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
@@ -191,7 +191,158 @@ async function carregarPerfil() {
   if (perfil) {
     sb.rpc('touch_ultimo_acesso').then(() => {})
     carregarMinhas()
+    atualizarBotaoPush()
+    $('bloco-admin').hidden = perfil.role !== 'admin'
+    if (perfil.role === 'admin') carregarAdmin()
   }
+}
+
+// ── Push (avisos de sala) ────────────────────────────────────────────────────
+function b64ParaUint8(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4)
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)))
+}
+
+async function subAtual() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null
+  const reg = await navigator.serviceWorker.ready
+  return reg.pushManager.getSubscription()
+}
+
+async function atualizarBotaoPush() {
+  const btn = $('btn-push')
+  if (!('PushManager' in window)) {
+    btn.disabled = true
+    btn.textContent = 'Avisos não suportados neste navegador'
+    return
+  }
+  const sub = await subAtual()
+  btn.textContent = sub ? 'Desativar avisos neste aparelho' : 'Ativar avisos neste aparelho'
+}
+
+$('btn-push').addEventListener('click', async () => {
+  const sub = await subAtual()
+  if (sub) {
+    await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+    await sub.unsubscribe()
+    toast('Avisos desativados.')
+  } else {
+    const perm = await Notification.requestPermission()
+    if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
+    const reg = await navigator.serviceWorker.ready
+    const nova = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
+    })
+    const j = nova.toJSON()
+    const { error } = await sb.from('push_subscriptions').insert({
+      aluno_id: sessao.user.id, endpoint: j.endpoint,
+      p256dh: j.keys.p256dh, auth: j.keys.auth,
+    })
+    if (error) { toast('Não deu pra registrar o aviso.'); await nova.unsubscribe(); return }
+    toast('Avisos ativados neste aparelho.')
+  }
+  atualizarBotaoPush()
+})
+
+// ── Reclamações / dados (LGPD) ───────────────────────────────────────────────
+$('form-reclamacao').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const desc = $('reclamacao-input').value.trim()
+  if (!desc) return
+  const { error } = await sb.from('reclamacoes').insert({
+    aluno_id: sessao.user.id, descricao: desc,
+  })
+  toast(error ? 'Não deu pra enviar. Tenta de novo.' : 'Reclamação enviada. Valeu!')
+  if (!error) $('reclamacao-input').value = ''
+})
+
+$('btn-export').addEventListener('click', async () => {
+  const { data, error } = await sb.rpc('exportar_meus_dados')
+  if (error) { toast('Export falhou. Tenta de novo.'); return }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `ibsala-dados-${hojeISO()}.json`
+  a.click()
+  URL.revokeObjectURL(a.href)
+})
+
+let excluirArmado = false
+$('btn-excluir').addEventListener('click', async () => {
+  if (!excluirArmado) {
+    excluirArmado = true
+    $('btn-excluir').textContent = 'Tem certeza? Toque de novo pra apagar tudo'
+    setTimeout(() => {
+      excluirArmado = false
+      $('btn-excluir').textContent = 'Excluir minha conta'
+    }, 6000)
+    return
+  }
+  const { error } = await sb.functions.invoke('apagar-conta')
+  if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
+  await sb.auth.signOut()
+  mostrar('home')
+  toast('Conta e dados excluídos.')
+})
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+async function carregarAdmin() {
+  const [cfg, recs, todos] = await Promise.all([
+    sb.from('config').select('value').eq('key', 'travado').single(),
+    sb.from('reclamacoes').select('id,descricao,criado,alunos(username)')
+      .is('resolvido_em', null).order('criado'),
+    sb.from('alunos').select('id,username,email,role,bloqueado').order('criado'),
+  ])
+
+  const travado = cfg.data?.value === true
+  $('btn-trava').textContent = travado ? 'Destravar o site' : 'Travar o site'
+  $('btn-trava').onclick = async () => {
+    await sb.from('config').update({ value: !travado }).eq('key', 'travado')
+    carregarAdmin()
+  }
+
+  const lr = $('admin-reclamacoes')
+  lr.replaceChildren(...(recs.data ?? []).map((r) => {
+    const el = li(`
+      <span class="disc">${esc(r.descricao)}</span>
+      <span class="meta">${esc(r.alunos?.username ?? '?')} · ${new Date(r.criado).toLocaleString('pt-BR')}</span>`)
+    const acoes = document.createElement('span')
+    acoes.className = 'acoes'
+    const btn = document.createElement('button')
+    btn.className = 'mini'
+    btn.textContent = 'Resolver'
+    btn.addEventListener('click', async () => {
+      await sb.from('reclamacoes').update({ resolvido_em: new Date().toISOString() }).eq('id', r.id)
+      carregarAdmin()
+    })
+    acoes.append(btn)
+    el.append(acoes)
+    return el
+  }))
+  $('admin-reclamacoes-vazio').hidden = (recs.data ?? []).length > 0
+
+  const la = $('admin-alunos')
+  la.replaceChildren(...(todos.data ?? []).map((a) => {
+    const el = li(`
+      <span class="disc">${esc(a.username)}${a.role === 'admin' ? ' · admin' : ''}</span>
+      <span class="meta">${esc(a.email)}${a.bloqueado ? ' · BLOQUEADO' : ''}</span>`)
+    if (a.role !== 'admin') {
+      const acoes = document.createElement('span')
+      acoes.className = 'acoes'
+      const btn = document.createElement('button')
+      btn.className = 'mini'
+      btn.textContent = a.bloqueado ? 'Desbloquear' : 'Bloquear'
+      btn.addEventListener('click', async () => {
+        await sb.from('alunos').update({ bloqueado: !a.bloqueado }).eq('id', a.id)
+        carregarAdmin()
+      })
+      acoes.append(btn)
+      el.append(acoes)
+    }
+    return el
+  }))
 }
 
 $('btn-login').addEventListener('click', async () => {
@@ -272,6 +423,8 @@ sb.auth.onAuthStateChange((_ev, s) => {
   sessao = s
   carregarPerfil()
 })
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
 
 carregarAgora()
 setInterval(carregarAgora, 5 * 60 * 1000)

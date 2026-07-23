@@ -363,3 +363,13 @@ input:focus-visible, button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   #toast { transition: none; }
 }
+
+.acoes-conta { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.acoes-conta .botao-raso { margin-top: 0; }
+
+.perigo { color: #dc2626; border-color: #dc2626; }
+
+@media (prefers-color-scheme: dark) {
+  .perigo { color: #e74c3c; border-color: #e74c3c; }
+}

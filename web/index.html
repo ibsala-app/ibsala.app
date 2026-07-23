@@ -45,7 +45,7 @@
         <button id="btn-menu-conta" class="btn-menu" data-vai="conta">Entrar</button>
       </nav>
 
-      <a class="saiba" href="https://ibsala.com.br/privacidade" target="_blank" rel="noopener">Sobre o IBSALA →</a>
+      <a class="saiba" href="privacidade.html">Privacidade e sobre o IBSALA →</a>
     </section>
 
     <!-- AGORA -->
@@ -107,7 +107,35 @@
         <p class="vazio">Pra adicionar, use a busca: cada resultado ganha um botão de
           adicionar com o dia da semana.</p>
 
-        <button id="btn-sair" class="botao-raso">Sair da conta</button>
+        <h2 class="secao">Avisos de sala</h2>
+        <button id="btn-push" class="btn-menu">Ativar avisos neste aparelho</button>
+        <p class="vazio">Você recebe a sala de cada aula ~50 minutos antes do horário.</p>
+
+        <h2 class="secao">Reportar problema</h2>
+        <form id="form-reclamacao" class="linha-form">
+          <input id="reclamacao-input" type="text" maxlength="500"
+                 placeholder="Descreva o problema" required>
+          <button class="botao-primario">Enviar</button>
+        </form>
+
+        <h2 class="secao">Seus dados</h2>
+        <div class="acoes-conta">
+          <button id="btn-export" class="botao-raso">Exportar meus dados</button>
+          <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
+          <button id="btn-sair" class="botao-raso">Sair da conta</button>
+        </div>
+
+        <div id="bloco-admin" hidden>
+          <h2 class="secao">Admin · site</h2>
+          <button id="btn-trava" class="btn-menu">…</button>
+
+          <h2 class="secao">Admin · reclamações</h2>
+          <ol id="admin-reclamacoes" class="board"></ol>
+          <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
+
+          <h2 class="secao">Admin · alunos</h2>
+          <ol id="admin-alunos" class="board"></ol>
+        </div>
       </div>
     </section>
   </main>
