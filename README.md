@@ -1,6 +1,6 @@
-# ibsala v2
+# ibsala v5
 
-Sistema de salas do Ibmec BH. Reescrita serverless do [app-salas], projetada pra
+Sistema de salas do Ibmec BH. Reescrita serverless do [app-salas] (v5), projetada pra
 custo zero e manutenção zero ("always free, set it and forget it").
 
 ## Stack

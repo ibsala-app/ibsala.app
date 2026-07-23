@@ -1,4 +1,4 @@
-# Design v2 — mapeamento do v1
+# Design v5 — mapeamento do app-salas (v anterior)
 
 Fonte: leitura do `app-salas` em 2026-07-23 (vp = `visualizar_planilha.py`,
 `server.py`, `scheduler.py`).
