@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>IBSALA</title>
+  <meta name="description" content="Sua sala de aula no Ibmec BH, agora.">
+  <meta name="theme-color" content="#0e1526">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <img src="icons/icon-192.png" alt="" width="28" height="28">
+      <span>IBSALA</span>
+    </div>
+    <span id="chip-slot" class="chip">—</span>
+  </header>
+
+  <main>
+    <!-- AGORA -->
+    <section id="tela-agora" class="tela ativa">
+      <div class="painel-cabeca">
+        <h1 id="livres-num">–</h1>
+        <p id="livres-rotulo">salas livres agora</p>
+      </div>
+      <div id="livres-grade" class="grade-salas"></div>
+
+      <h2 class="secao">Acontecendo agora</h2>
+      <ol id="board-agora" class="board"></ol>
+      <p id="agora-vazio" class="vazio" hidden>Nenhuma aula neste horário. O mapa do dia
+        chega às 5h em dia de aula.</p>
+    </section>
+
+    <!-- BUSCAR -->
+    <section id="tela-buscar" class="tela">
+      <label class="busca-wrap">
+        <input id="busca-input" type="search" placeholder="Disciplina, professor ou código"
+               autocomplete="off">
+      </label>
+      <ol id="busca-lista" class="board"></ol>
+      <p id="busca-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
+        capturado do mapa oficial.</p>
+    </section>
+
+    <!-- CONTA -->
+    <section id="tela-conta" class="tela">
+      <div id="conta-deslogado" hidden>
+        <div class="painel-cabeca">
+          <h1 class="menor">Suas aulas, sua sala</h1>
+          <p>Entre pra ver onde é sua próxima aula e receber aviso de sala antes de cada
+            horário.</p>
+        </div>
+        <button id="btn-login" class="botao-primario">Entrar com Google</button>
+      </div>
+
+      <div id="conta-cadastro" hidden>
+        <h2 class="secao">Escolha seu username</h2>
+        <form id="form-username" class="linha-form">
+          <input id="username-input" type="text" minlength="3" maxlength="20"
+                 pattern="[a-zA-Z0-9_.]+" placeholder="ex.: joshazze" required>
+          <button class="botao-primario">Criar conta</button>
+        </form>
+        <p class="vazio">Só letras, números, ponto e underline.</p>
+      </div>
+
+      <div id="conta-logado" hidden>
+        <h2 class="secao">Hoje</h2>
+        <ol id="board-hoje" class="board"></ol>
+        <p id="hoje-vazio" class="vazio" hidden>Sem aulas suas no mapa de hoje.</p>
+
+        <h2 class="secao">Minhas matérias</h2>
+        <ol id="lista-materias" class="board"></ol>
+        <p class="vazio">Pra adicionar, use a busca: cada resultado ganha um botão de
+          adicionar com o dia da semana.</p>
+
+        <button id="btn-sair" class="botao-raso">Sair da conta</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="abas" aria-label="Navegação">
+    <button data-tela="agora" class="ativa">Agora</button>
+    <button data-tela="buscar">Buscar</button>
+    <button data-tela="conta">Conta</button>
+  </nav>
+
+  <div id="toast" role="status"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

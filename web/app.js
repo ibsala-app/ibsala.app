@@ -1,0 +1,268 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SUPABASE_URL, SUPABASE_KEY } from './config.js'
+
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+// ── Slots (portado do v1) ────────────────────────────────────────────────────
+const SLOTS = {
+  manha1: { label: '1º Manhã', ini: 6 * 60,       fim: 9 * 60 + 29 },
+  manha2: { label: '2º Manhã', ini: 9 * 60 + 30,  fim: 12 * 60 + 59 },
+  tarde1: { label: '1º Tarde', ini: 13 * 60,      fim: 15 * 60 + 29 },
+  tarde2: { label: '2º Tarde', ini: 15 * 60 + 30, fim: 17 * 60 + 59 },
+  noite1: { label: '1º Noite', ini: 18 * 60,      fim: 18 * 60 + 59 },
+  noite2: { label: '2º Noite', ini: 19 * 60,      fim: 23 * 60 + 59 },
+}
+const DIAS = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
+
+function agoraBRT() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+}
+function hojeISO() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+}
+function minutosAgora() {
+  const d = agoraBRT()
+  return d.getHours() * 60 + d.getMinutes()
+}
+function slotAtual() {
+  const m = minutosAgora()
+  for (const [k, s] of Object.entries(SLOTS)) if (m >= s.ini && m <= s.fim) return k
+  return null
+}
+function horarioParaSlot(h) {
+  const m = parseHora(String(h ?? '').split('/')[0])
+  if (m == null) return null
+  for (const [k, s] of Object.entries(SLOTS)) if (m >= s.ini && m <= s.fim) return k
+  return null
+}
+function parseHora(t) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? '').trim())
+  return m ? +m[1] * 60 + +m[2] : null
+}
+function intervaloContem(horario, min) {
+  const [a, b] = String(horario ?? '').split('/')
+  const ia = parseHora(a), ib = parseHora(b)
+  return ia != null && ib != null && min >= ia && min <= ib
+}
+
+// ── UI helpers ───────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id)
+let toastTimer
+function toast(msg) {
+  const t = $('toast')
+  t.textContent = msg
+  t.classList.add('on')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => t.classList.remove('on'), 3200)
+}
+function li(html) {
+  const el = document.createElement('li')
+  el.innerHTML = html
+  return el
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+document.querySelectorAll('.abas button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.abas button').forEach((x) => x.classList.remove('ativa'))
+    document.querySelectorAll('.tela').forEach((x) => x.classList.remove('ativa'))
+    b.classList.add('ativa')
+    $(`tela-${b.dataset.tela}`).classList.add('ativa')
+  })
+})
+
+// ── Agora ────────────────────────────────────────────────────────────────────
+let mapaHoje = []
+let salas = []
+
+async function carregarAgora() {
+  const [mapa, inv] = await Promise.all([
+    sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala')
+      .eq('data', hojeISO()),
+    sb.from('salas').select('sala,predio').order('sala'),
+  ])
+  if (mapa.error || inv.error) { toast('Sem conexão com o servidor.'); return }
+  mapaHoje = mapa.data
+  salas = inv.data
+
+  const slot = slotAtual()
+  $('chip-slot').textContent = slot ? SLOTS[slot].label : 'Fora de horário'
+
+  const min = minutosAgora()
+  const rolando = []
+  const vistos = new Set()
+  for (const r of mapaHoje) {
+    if (!intervaloContem(r.horario, min)) continue
+    const k = [r.horario, r.sala, r.disciplina, r.turma].join('|')
+    if (vistos.has(k)) continue
+    vistos.add(k)
+    rolando.push(r)
+  }
+
+  const ocupadas = new Set(
+    mapaHoje.filter((r) => horarioParaSlot(r.horario) === slot && r.sala)
+      .map((r) => r.sala))
+  const livres = slot ? salas.filter((s) => !ocupadas.has(s.sala)) : []
+
+  $('livres-num').textContent = slot ? livres.length : '–'
+  $('livres-rotulo').textContent = slot
+    ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
+    : 'fora do horário de aulas'
+  const grade = $('livres-grade')
+  grade.replaceChildren(...livres.slice(0, 40).map((s) => {
+    const c = document.createElement('span')
+    c.className = 'sala-chip'
+    c.textContent = s.sala
+    return c
+  }))
+
+  const board = $('board-agora')
+  board.replaceChildren(...rolando.map((r) => li(`
+    <span class="disc">${esc(r.disciplina)}</span>
+    <span class="sala">${esc(r.sala || '?')}</span>
+    <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
+  $('agora-vazio').hidden = rolando.length > 0
+}
+
+// ── Busca ────────────────────────────────────────────────────────────────────
+let buscaTimer
+$('busca-input').addEventListener('input', (e) => {
+  clearTimeout(buscaTimer)
+  buscaTimer = setTimeout(() => buscar(e.target.value.trim()), 300)
+})
+
+async function buscar(termo) {
+  const lista = $('busca-lista')
+  if (termo.length < 2) { lista.replaceChildren(); $('busca-vazio').hidden = true; return }
+  const t = `%${termo}%`
+  const { data, error } = await sb.from('disciplinas_historico')
+    .select('codigo,turma,disciplina,professor')
+    .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)
+    .limit(20)
+  if (error) { toast('Busca falhou. Tenta de novo.'); return }
+  lista.replaceChildren(...data.map((r) => {
+    const el = li(`
+      <span class="disc">${esc(r.disciplina)}</span>
+      <span class="sala">${esc((r.codigo || '').split('-')[0])}</span>
+      <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
+    if (perfil) {
+      const acoes = document.createElement('span')
+      acoes.className = 'acoes'
+      const sel = document.createElement('select')
+      sel.className = 'mini'
+      sel.innerHTML = DIAS.map((d, i) => i ? `<option value="${i}">${d}</option>` : '').join('')
+      const btn = document.createElement('button')
+      btn.className = 'mini'
+      btn.textContent = 'Adicionar'
+      btn.addEventListener('click', () => adicionarMateria(r, +sel.value))
+      acoes.append(sel, btn)
+      el.append(acoes)
+    }
+    return el
+  }))
+  $('busca-vazio').hidden = data.length > 0
+}
+
+// ── Conta ────────────────────────────────────────────────────────────────────
+let sessao = null
+let perfil = null
+
+function mostrarConta() {
+  $('conta-deslogado').hidden = !!sessao
+  $('conta-cadastro').hidden = !(sessao && !perfil)
+  $('conta-logado').hidden = !(sessao && perfil)
+}
+
+async function carregarPerfil() {
+  if (!sessao) { perfil = null; mostrarConta(); return }
+  const { data } = await sb.from('alunos').select('*').eq('id', sessao.user.id).maybeSingle()
+  perfil = data
+  mostrarConta()
+  if (perfil) {
+    sb.rpc('touch_ultimo_acesso').then(() => {})
+    carregarMinhas()
+  }
+}
+
+$('btn-login').addEventListener('click', async () => {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname },
+  })
+  if (error) toast('Login Google ainda não configurado neste ambiente.')
+})
+
+$('btn-sair').addEventListener('click', async () => {
+  await sb.auth.signOut()
+  toast('Você saiu.')
+})
+
+$('form-username').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const u = $('username-input').value.trim()
+  const { data: livre } = await sb.rpc('username_disponivel', { candidato: u })
+  if (!livre) { toast('Esse username já existe. Tenta outro.'); return }
+  const { error } = await sb.from('alunos').insert({
+    id: sessao.user.id, username: u, email: sessao.user.email,
+  })
+  if (error) { toast('Não deu pra criar a conta. Tenta de novo.'); return }
+  toast(`Bem-vindo/a, ${u}!`)
+  carregarPerfil()
+})
+
+async function carregarMinhas() {
+  const { data, error } = await sb.from('materias')
+    .select('id,dia,turma,disciplina,professor,codigo')
+    .order('dia').order('disciplina')
+  if (error) return
+  const lista = $('lista-materias')
+  lista.replaceChildren(...data.map((m) => {
+    const el = li(`
+      <span class="disc">${esc(m.disciplina)}</span>
+      <span class="sala">${DIAS[m.dia] ?? '?'}</span>
+      <span class="meta">${esc(m.turma)} · ${esc(m.professor ?? '')} · ${esc(m.codigo)}</span>`)
+    const acoes = document.createElement('span')
+    acoes.className = 'acoes'
+    const btn = document.createElement('button')
+    btn.className = 'mini'
+    btn.textContent = 'Remover'
+    btn.addEventListener('click', async () => {
+      await sb.from('materias').delete().eq('id', m.id)
+      carregarMinhas()
+    })
+    acoes.append(btn)
+    el.append(acoes)
+    return el
+  }))
+
+  const hoje = agoraBRT().getDay()
+  const deHoje = data.filter((m) => m.dia === hoje)
+  const board = $('board-hoje')
+  board.replaceChildren(...deHoje.map((m) => {
+    const aula = mapaHoje.find((r) => r.codigo && r.codigo === m.codigo)
+    return li(`
+      <span class="disc">${esc(m.disciplina)}</span>
+      <span class="sala">${esc(aula?.sala || '—')}</span>
+      <span class="meta">${esc(aula?.horario || 'sem sala no mapa ainda')} · ${esc(m.turma)}</span>`)
+  }))
+  $('hoje-vazio').hidden = deHoje.length > 0
+}
+
+async function adicionarMateria(r, dia) {
+  const { error } = await sb.from('materias').insert({
+    aluno_id: sessao.user.id, dia,
+    turma: r.turma ?? '', disciplina: r.disciplina, professor: r.professor, codigo: r.codigo,
+  })
+  toast(error ? 'Você já tem essa matéria nesse dia.' : `Adicionada na ${DIAS[dia]}.`)
+  if (!error) carregarMinhas()
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+sb.auth.onAuthStateChange((_ev, s) => {
+  sessao = s
+  carregarPerfil()
+})
+
+carregarAgora()
+setInterval(carregarAgora, 5 * 60 * 1000)
