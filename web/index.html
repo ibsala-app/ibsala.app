@@ -4,33 +4,58 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>IBSALA</title>
-  <meta name="description" content="Sua sala de aula no Ibmec BH, agora.">
-  <meta name="theme-color" content="#0e1526">
+  <meta name="description" content="Consulta de salas e horários do Ibmec BH em tempo real.">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#002555">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161c2c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
   <header class="topo">
-    <div class="marca">
-      <img src="icons/icon-192.png" alt="" width="28" height="28">
-      <span>IBSALA</span>
+    <div class="topo-linha">
+      <div class="marca">
+        <img src="icons/icon-192.png" alt="" width="30" height="30">
+        <div>
+          <span class="marca-nome">IBSALA</span>
+          <span class="marca-sub">ibtech · salas em tempo real</span>
+        </div>
+      </div>
     </div>
-    <span id="chip-slot" class="chip">—</span>
+    <div class="pills">
+      <span id="pill-data" class="pill pill-azul">—</span>
+      <span id="pill-slot" class="pill">—</span>
+      <span id="pill-livres" class="pill">—</span>
+    </div>
   </header>
 
   <main>
+    <!-- HOME (estrutura do v1: eyebrow + tagline + botões grandes) -->
+    <section id="tela-home" class="tela ativa">
+      <p class="eyebrow">Ibtech</p>
+      <p class="tagline">consulta de salas e horários em tempo real</p>
+
+      <nav class="menu">
+        <button class="btn-menu primario" data-vai="agora">Salas agora</button>
+        <button class="btn-menu" data-vai="buscar">Buscar disciplinas</button>
+        <button id="btn-menu-conta" class="btn-menu" data-vai="conta">Entrar</button>
+      </nav>
+
+      <a class="saiba" href="https://ibsala.com.br/privacidade" target="_blank" rel="noopener">Sobre o IBSALA →</a>
+    </section>
+
     <!-- AGORA -->
-    <section id="tela-agora" class="tela ativa">
+    <section id="tela-agora" class="tela">
+      <button class="voltar" data-vai="home">← Voltar</button>
       <div class="painel-cabeca">
         <h1 id="livres-num">–</h1>
         <p id="livres-rotulo">salas livres agora</p>
+        <div id="livres-grade" class="grade-salas"></div>
       </div>
-      <div id="livres-grade" class="grade-salas"></div>
 
       <h2 class="secao">Acontecendo agora</h2>
       <ol id="board-agora" class="board"></ol>
@@ -40,6 +65,7 @@
 
     <!-- BUSCAR -->
     <section id="tela-buscar" class="tela">
+      <button class="voltar" data-vai="home">← Voltar</button>
       <label class="busca-wrap">
         <input id="busca-input" type="search" placeholder="Disciplina, professor ou código"
                autocomplete="off">
@@ -51,13 +77,14 @@
 
     <!-- CONTA -->
     <section id="tela-conta" class="tela">
+      <button class="voltar" data-vai="home">← Voltar</button>
       <div id="conta-deslogado" hidden>
         <div class="painel-cabeca">
           <h1 class="menor">Suas aulas, sua sala</h1>
           <p>Entre pra ver onde é sua próxima aula e receber aviso de sala antes de cada
             horário.</p>
         </div>
-        <button id="btn-login" class="botao-primario">Entrar com Google</button>
+        <button id="btn-login" class="btn-menu primario">Entrar com Google</button>
       </div>
 
       <div id="conta-cadastro" hidden>
@@ -85,11 +112,9 @@
     </section>
   </main>
 
-  <nav class="abas" aria-label="Navegação">
-    <button data-tela="agora" class="ativa">Agora</button>
-    <button data-tela="buscar">Buscar</button>
-    <button data-tela="conta">Conta</button>
-  </nav>
+  <footer class="rodape">
+    <p>© 2026 Joshua Azze &amp; IBtech — Todos os direitos reservados.</p>
+  </footer>
 
   <div id="toast" role="status"></div>
   <script type="module" src="app.js"></script>

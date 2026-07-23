@@ -63,13 +63,14 @@ function li(html) {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-document.querySelectorAll('.abas button').forEach((b) => {
-  b.addEventListener('click', () => {
-    document.querySelectorAll('.abas button').forEach((x) => x.classList.remove('ativa'))
-    document.querySelectorAll('.tela').forEach((x) => x.classList.remove('ativa'))
-    b.classList.add('ativa')
-    $(`tela-${b.dataset.tela}`).classList.add('ativa')
-  })
+function mostrar(tela) {
+  document.querySelectorAll('.tela').forEach((x) => x.classList.remove('ativa'))
+  $(`tela-${tela}`).classList.add('ativa')
+  window.scrollTo(0, 0)
+}
+
+document.querySelectorAll('[data-vai]').forEach((b) => {
+  b.addEventListener('click', () => mostrar(b.dataset.vai))
 })
 
 // ── Agora ────────────────────────────────────────────────────────────────────
@@ -87,7 +88,11 @@ async function carregarAgora() {
   salas = inv.data
 
   const slot = slotAtual()
-  $('chip-slot').textContent = slot ? SLOTS[slot].label : 'Fora de horário'
+  const d = agoraBRT()
+  const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO']
+  $('pill-data').textContent =
+    `${DIAS_LONGO[d.getDay()]} · ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  $('pill-slot').textContent = slot ? SLOTS[slot].label : 'Fora de horário'
 
   const min = minutosAgora()
   const rolando = []
@@ -109,6 +114,7 @@ async function carregarAgora() {
   $('livres-rotulo').textContent = slot
     ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
     : 'fora do horário de aulas'
+  $('pill-livres').textContent = slot ? `${livres.length} salas livres` : `${salas.length} salas`
   const grade = $('livres-grade')
   grade.replaceChildren(...livres.slice(0, 40).map((s) => {
     const c = document.createElement('span')
@@ -172,6 +178,9 @@ function mostrarConta() {
   $('conta-deslogado').hidden = !!sessao
   $('conta-cadastro').hidden = !(sessao && !perfil)
   $('conta-logado').hidden = !(sessao && perfil)
+  $('btn-menu-conta').textContent = perfil ? `Minhas aulas (${perfil.username})` : 'Entrar'
+  // volta do OAuth: cai direto no passo pendente da conta
+  if (sessao && !perfil) mostrar('conta')
 }
 
 async function carregarPerfil() {
