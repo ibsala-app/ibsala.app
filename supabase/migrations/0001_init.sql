@@ -5,21 +5,6 @@
 create extension if not exists pg_cron;
 
 -- ---------------------------------------------------------------------------
--- helpers
--- ---------------------------------------------------------------------------
-
-create or replace function public.is_admin()
-returns boolean
-language sql stable security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.alunos
-    where id = auth.uid() and role = 'admin'
-  );
-$$;
-
--- ---------------------------------------------------------------------------
 -- perfil (aba Alunos)
 -- ---------------------------------------------------------------------------
 
@@ -35,6 +20,18 @@ create table public.alunos (
 );
 
 create unique index alunos_username_key on public.alunos (lower(username));
+
+-- helper de autorização (depois da tabela: o corpo é validado na criação)
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.alunos
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
 
 alter table public.alunos enable row level security;
 
