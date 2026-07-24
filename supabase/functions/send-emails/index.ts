@@ -1,4 +1,5 @@
-// send-emails: drena a email_queue via Resend (remetente avisos@mail.ibsala.com.br).
+// send-emails: drena a email_queue via Resend (remetente no-reply; Resend é só
+// pros emails automáticos — suporte/recebimento é o Gmail ibsala.app@gmail.com).
 // Chamada pelo pg_cron a cada 5 min (0004_email.sql) com body {} — pega até 50
 // pendentes (enviado=false, tentativas<5) e envia uma a uma (rate limit Resend
 // free = 2 req/s). Sucesso marca enviado; falha incrementa tentativas; 429 para
@@ -12,7 +13,7 @@
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
-const FROM = Deno.env.get('EMAIL_FROM') ?? 'IBSALA <avisos@mail.ibsala.com.br>'
+const FROM = Deno.env.get('EMAIL_FROM') ?? 'IBSALA <nao-responda@mail.ibsala.com.br>'
 
 async function rest(path: string, init: RequestInit = {}) {
   const r = await fetch(`${URL_BASE}/rest/v1/${path}`, {
