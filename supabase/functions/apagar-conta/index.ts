@@ -21,8 +21,21 @@ Deno.serve(async (req) => {
     return new Response('não autenticado', { status: 401, headers: CORS })
   }
 
+  // perfil antes do delete (o cascade leva a linha de alunos junto)
+  const { data: aluno } = await admin
+    .from('alunos').select('email, username').eq('id', data.user.id).single()
+
   const { error: e2 } = await admin.auth.admin.deleteUser(data.user.id)
   if (e2) return new Response('falha ao excluir', { status: 500, headers: CORS })
+
+  // confirmação de exclusão (best-effort; o cron email-drain envia)
+  if (aluno?.email) {
+    await admin.from('email_queue').insert({
+      to_email: aluno.email,
+      subject: '[IBSALA] Sua conta foi excluída',
+      body: JSON.stringify({ template: 'exclusao', vars: { username: aluno.username } }),
+    })
+  }
 
   return Response.json({ ok: true }, { headers: CORS })
 })
