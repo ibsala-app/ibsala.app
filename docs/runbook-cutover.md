@@ -1,0 +1,82 @@
+# Runbook do cutover — 02/08
+
+Pré-requisitos (conferir ANTES do dia): custom domains `ibsala.com.br` + `www`
+adicionados no projeto Pages (dashboard, ficam "pending" até o DNS; o cert só
+emite com eles lá), `RESEND_API_KEY` nova salva em
+`~/.claude/secrets/ibsala-resend-v5.env` (NÃO setada no Supabase ainda, a menos
+que já esteja com a function pós-PR #3, que segura a fila em 401/403).
+
+Zona CF `65a2154d2a736ba0564a006531b15d39`, token zone-scoped em
+`~/.claude/secrets/ibsala-cloudflare.env`. Records atuais (25/07):
+
+| id | tipo | nome | conteúdo |
+|---|---|---|---|
+| `546a79ec...` | A | ibsala.com.br | 35.196.182.217 (VM v1) |
+| `346aff5c...` | CNAME | www | ibsala.com.br |
+
+## 1. Smoke no pages.dev
+
+Checklist de 25/07 repetido: home renderiza com dado vivo (pill de status),
+login Google, sw.js e manifest 200, CSP presente. Push já validado no iPhone.
+
+## 2. Flip do DNS (o cutover em si)
+
+```bash
+source ~/.claude/secrets/ibsala-cloudflare.env
+
+# apex: A → CNAME flattened pro Pages, proxied
+curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/546a79ec<id-completo>" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"type":"CNAME","name":"ibsala.com.br","content":"ibsala.pages.dev","proxied":true,"ttl":1}'
+
+# www: aponta direto pro Pages, proxied
+curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/346aff5c<id-completo>" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"type":"CNAME","name":"www.ibsala.com.br","content":"ibsala.pages.dev","proxied":true,"ttl":1}'
+```
+
+IDs completos: `curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+"https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" | python3 -m json.tool | grep -B2 -A4 '"A"'`
+
+Rollback = os mesmos PUTs de volta pra `{"type":"A","content":"35.196.182.217","proxied":false}`.
+
+Validar: `curl -sI https://ibsala.com.br | grep -i cf-ray` (proxied) e a home
+servindo o v5 (título/asset do Pages, não o Flask).
+
+## 3. Email de re-cadastro (v1 ainda vivo)
+
+Texto e procedimento em [[email-recadastro|docs/email-recadastro.md]]. Com o
+DNS já flipado, o POST vai na VM direto:
+`curl --resolve ibsala.com.br:443:35.196.182.217 https://ibsala.com.br/api/adm/email/custom ...`
+Conferir no log do flask: `Email custom enviado: 67 ok`.
+
+## 4. Migrar o email pro v5 (ordem rígida)
+
+1. Na conta Resend VELHA: remover o domínio `mail.ibsala.com.br`.
+2. Na conta Resend NOVA (Google ibsala.app): adicionar `mail.ibsala.com.br`.
+   DKIM/SPF/MX já estão na zona CF (preservados em 23/07), verifica na hora.
+3. `supabase secrets set RESEND_API_KEY=<key nova> --project-ref jbdmkbivmflauushiqca`
+4. Prova: item id=1 da `email_queue` (canário "[teste hold] ignorar" plantado
+   em 25/07) deve SAIR no próximo tick do cron pra jazzedistel@gmail.com.
+   Antes da verificação do domínio, a resposta da function é `{hold: 403}` e
+   `tentativas` fica em 0 (PR #3). Depois de receber o canário, deletar a linha.
+
+## 5. Funeral da VM (pode ser dias depois, sem pressa)
+
+1. Atlética migra pra Oracle ANTES de desligar (VM é compartilhada).
+2. Backup final: `.env` + logs + cache da VM (script de backup já roda 03:00).
+3. Bundle do repo: `~/cerebro-backups/app-salas-pre-funeral-2026-07-25.bundle`
+   (gerado em 25/07, `git bundle verify` ok). Deletar `joshazze/app-salas`.
+4. Revogar as 4 credenciais vazadas do v1: ADM_PASSWORD (morre com a VM),
+   service account do Sheets (console GCP), VAPID velho (morre com a VM),
+   RESEND key velha (dashboard conta velha) — a key velha é a ÚLTIMA, só
+   depois do re-cadastro enviado.
+5. Desligar `instance-ibsala` no console GCP (parar, não deletar, por 1-2
+   semanas de arrependimento; deletar depois).
+6. Sentry v1 (org ibsala, python-flask): arquivar/mutar alertas.
+
+## 6. Pós
+
+- Monitorar Sentry v5 (org ibsala-pp) por 48h.
+- `vault`: atualizar ibsala.md (v1 morto), ibsala-v5-master.md, repos.md.
+- ImprovMX do v1 morre de vez (decisão 24/07: suporte é o Gmail direto).
