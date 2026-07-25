@@ -2,8 +2,9 @@
 // pros emails automáticos — suporte/recebimento é o Gmail ibsala.app@gmail.com).
 // Chamada pelo pg_cron a cada 5 min (0004_email.sql) com body {} — pega até 50
 // pendentes (enviado=false, tentativas<5) e envia uma a uma (rate limit Resend
-// free = 2 req/s). Sucesso marca enviado; falha incrementa tentativas; 429 para
-// a rodada e deixa o resto pro próximo tick.
+// free = 2 req/s). Sucesso marca enviado; falha do item incrementa tentativas;
+// erro de CONTA (429 rate limit, 401 key inválida, 403 domínio não verificado)
+// para a rodada sem queimar tentativas — a fila segura até a conta estar sã.
 // body da fila: JSON {"template":"welcome"|"exclusao","vars":{...}} renderizado
 // aqui, ou HTML cru (comunicados futuros inserem o HTML pronto direto).
 // Deploy: supabase functions deploy send-emails --no-verify-jwt
@@ -140,7 +141,7 @@ Deno.serve(async (req) => {
   if (!pendentes.length) return Response.json({ enviados: 0, pendentes: 0 })
 
   let enviados = 0
-  let rateLimited = false
+  let hold: number | null = null // status HTTP que travou a rodada (429/401/403)
   for (const e of pendentes) {
     const html = renderBody(e.body)
     if (html === null) {
@@ -156,15 +157,16 @@ Deno.serve(async (req) => {
     if (r.ok) {
       await rest(`email_queue?id=eq.${e.id}`, { method: 'PATCH', body: JSON.stringify({ enviado: true }) })
       enviados++
+    } else if (r.status === 429 || r.status === 401 || r.status === 403) {
+      // erro de conta, não do item: não incrementa tentativas de ninguém
+      hold = r.status
+      break
     } else {
-      if (r.status !== 429) {
-        await rest(`email_queue?id=eq.${e.id}`,
-          { method: 'PATCH', body: JSON.stringify({ tentativas: e.tentativas + 1 }) })
-      }
-      if (r.status === 429) { rateLimited = true; break }
+      await rest(`email_queue?id=eq.${e.id}`,
+        { method: 'PATCH', body: JSON.stringify({ tentativas: e.tentativas + 1 }) })
     }
     await new Promise((ok) => setTimeout(ok, 600)) // Resend free: 2 req/s
   }
 
-  return Response.json({ enviados, pendentes: pendentes.length, rateLimited })
+  return Response.json({ enviados, pendentes: pendentes.length, hold })
 })
