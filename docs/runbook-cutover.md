@@ -1,10 +1,14 @@
 # Runbook do cutover — 02/08
 
-Pré-requisitos (conferir ANTES do dia): custom domains `ibsala.com.br` + `www`
-adicionados no projeto Pages (dashboard, ficam "pending" até o DNS; o cert só
-emite com eles lá), `RESEND_API_KEY` nova salva em
-`~/.claude/secrets/ibsala-resend-v5.env` (NÃO setada no Supabase ainda, a menos
-que já esteja com a function pós-PR #3, que segura a fila em 401/403).
+Pré-requisito (conferir ANTES do dia): `RESEND_API_KEY` nova salva em
+`~/.claude/secrets/ibsala-resend-v5.env` (setar no Supabase já é seguro
+pós-PR #3, que segura a fila em 401/403).
+
+DESCOBERTA 25/07: custom domain NÃO dá pra deixar "pending" antes. Com a zona
+na MESMA conta CF, o wizard do Pages não tem estado pendente: a tela final
+("Confirm new DNS record") substitui o A do apex por CNAME→ibsala.pages.dev
+no clique. Adicionar o custom domain É o flip. Fica pro dia. (Testado até a
+tela final e abortado; A record conferido intacto por API depois.)
 
 Zona CF `65a2154d2a736ba0564a006531b15d39`, token zone-scoped em
 `~/.claude/secrets/ibsala-cloudflare.env`. Records atuais (25/07):
@@ -20,6 +24,17 @@ Checklist de 25/07 repetido: home renderiza com dado vivo (pill de status),
 login Google, sw.js e manifest 200, CSP presente. Push já validado no iPhone.
 
 ## 2. Flip do DNS (o cutover em si)
+
+**Caminho primário (dashboard, 1 clique por domínio):** Workers & Pages →
+ibsala → Custom domains → Set up a custom domain → `ibsala.com.br` → Continue →
+a tela "Confirm new DNS record" mostra A→CNAME → **Activate domain** (isso
+registra o domínio no Pages E troca o record de uma vez). Repetir pra
+`www.ibsala.com.br`. O cert do edge já cobre o apex+www (Universal SSL da zona,
+ativa desde 24/07).
+
+**Fallback/rollback via API** (token zone-scoped alcança DNS; só vale como
+rollback ou se o dash estiver fora — o PUT sozinho NÃO registra o domínio no
+Pages):
 
 ```bash
 source ~/.claude/secrets/ibsala-cloudflare.env
