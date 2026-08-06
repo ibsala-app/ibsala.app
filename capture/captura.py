@@ -9,11 +9,15 @@ import csv
 import io
 import json
 import os
+import re
 import sys
 import unicodedata
 import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+REPERTORIO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               os.pardir, "salas-repertorio.json")
 
 SPREADSHEET_ID = "1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
@@ -39,6 +43,60 @@ def _extrair_codigo(texto):
         codigo, nome = str(texto).split("/", 1)
         return codigo.strip(), nome.strip()
     return "", str(texto).strip()
+
+
+def _chave(texto):
+    """Chave de casamento do repertório: sem acento, espaço interno colapsado,
+    maiúscula. A planilha escreve a mesma sala como '107 (P2) LAB. METROLOGIA'
+    e '107 (P2) - LAB.METROLOGIA', então comparar string crua não serve."""
+    return re.sub(r"\s+", " ", _sem_acento(texto)).strip().upper()
+
+
+def carregar_repertorio(caminho=REPERTORIO_PATH):
+    """Lê salas-repertorio.json (fonte única, idêntica no repo do v1)."""
+    with open(caminho, encoding="utf-8") as f:
+        rep = json.load(f)
+    return {
+        "salas": {_chave(s): s for s in rep["salas"]},
+        "predio": dict(rep["salas"]),
+        "apelidos": {_chave(a): c for a, c in rep["apelidos"].items()},
+        "ignoradas": {_chave(i) for i in rep["ignoradas"]},
+    }
+
+
+def resolver_sala(bruta, rep):
+    """Grafia crua da planilha -> (canônica, motivo).
+
+    canônica é None quando a linha não ocupa sala nenhuma. Motivos: 'canonica',
+    'apelido', 'ignorada', 'vazia', 'desconhecida'.
+    """
+    k = _chave(bruta)
+    if not k:
+        return None, "vazia"
+    if "/" in k:
+        # par concatenado ("302/303") é erro do sistema de origem: essa sala não
+        # existe e a linha não ocupa nada
+        return None, "ignorada"
+    if k in rep["ignoradas"]:
+        return None, "ignorada"
+    if k in rep["salas"]:
+        return rep["salas"][k], "canonica"
+    if k in rep["apelidos"]:
+        return rep["apelidos"][k], "apelido"
+    return None, "desconhecida"
+
+
+def anotar_canonicas(linhas, rep):
+    """Preenche sala_canon em cada linha. Devolve as grafias desconhecidas
+    (grafia crua -> nº de ocorrências) pra quarentena."""
+    pendentes = {}
+    for l in linhas:
+        canon, motivo = resolver_sala(l.get("sala", ""), rep)
+        l["sala_canon"] = canon
+        if motivo == "desconhecida":
+            bruta = str(l.get("sala", "")).strip()
+            pendentes[bruta] = pendentes.get(bruta, 0) + 1
+    return pendentes
 
 
 def baixar_csv():
@@ -121,14 +179,14 @@ def _post(url, key, payload, on_conflict, resolution):
         return resp.status
 
 
-def enviar(linhas):
+def enviar(linhas, rep, pendentes=None):
     base = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1"
     key = os.environ["SUPABASE_SERVICE_KEY"]
 
     # mapa do dia: mesma semântica do keep="last" do v1 (atualiza a sala)
     _post(f"{base}/mapa_dia", key, linhas, "data,merge_key", "merge-duplicates")
 
-    # side-effects do v1: catálogo de disciplinas e inventário de salas
+    # side-effect do v1: catálogo de disciplinas
     disc = {l["codigo"]: {
         "codigo": l["codigo"], "turma": l["turma"],
         "disciplina": l["disciplina"], "professor": l["professor"],
@@ -137,12 +195,18 @@ def enviar(linhas):
         _post(f"{base}/disciplinas_historico", key, list(disc.values()),
               "codigo", "merge-duplicates")
 
-    salas = {l["sala"]: {
-        "sala": l["sala"],
-        "predio": "P2" if "(P2)" in l["sala"] else "P1",
-    } for l in linhas if l["sala"]}
-    if salas:
-        _post(f"{base}/salas", key, list(salas.values()), "sala", "ignore-duplicates")
+    # o repertório manda: sala nova nasce no JSON, não no que a planilha cospe.
+    # upsert idempotente pra dispensar migration quando uma sala é acrescentada
+    _post(f"{base}/salas", key,
+          [{"sala": s, "predio": p} for s, p in rep["predio"].items()],
+          "sala", "ignore-duplicates")
+
+    # grafia fora do repertório fica em quarentena: não vira sala livre e espera
+    # revisão humana
+    if pendentes:
+        _post(f"{base}/salas_pendentes", key,
+              [{"alias": a, "ocorrencias": n} for a, n in pendentes.items()],
+              "alias", "merge-duplicates")
 
 
 def main():
@@ -157,8 +221,16 @@ def main():
         por_cat[l["categoria"]] = por_cat.get(l["categoria"], 0) + 1
     print(f"{len(linhas)} linhas: " + ", ".join(f"{c}={n}" for c, n in por_cat.items()))
 
+    rep = carregar_repertorio()
+    pendentes = anotar_canonicas(linhas, rep)
+    ocupando = sum(1 for l in linhas if l["sala_canon"])
+    print(f"{ocupando} linhas ocupam sala do repertório; "
+          f"{len(linhas) - ocupando} sem sala (vazia, ignorada ou desconhecida)")
+    if pendentes:
+        print("quarentena: " + ", ".join(f"{a!r}x{n}" for a, n in pendentes.items()))
+
     if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
-        enviar(linhas)
+        enviar(linhas, rep, pendentes)
         print("upsert ok")
     else:
         print("dry-run (sem SUPABASE_URL/SUPABASE_SERVICE_KEY)")
