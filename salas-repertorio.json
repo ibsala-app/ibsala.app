@@ -1,0 +1,71 @@
+{
+  "_doc": "Repertorio fixo de salas do Ibmec BH. Fonte unica de verdade, revisada sala a sala em 2026-08-06. Copia identica vive em app-salas/ (v1). O scraper NAO escreve aqui: grafia desconhecida vai pra quarentena.",
+  "versao": "2026-08-06",
+  "chave": "casamento por strip + colapso de espacos internos + upper + remocao de acento (NFD)",
+  "regra_barra": "grafia com '/' e erro do sistema de origem (a sala nao existe): ignorada, sem ocupacao. Cobre pares novos sem precisar cadastrar.",
+
+  "salas": {
+    "101": "P1", "102": "P1", "103": "P1", "104": "P1", "105": "P1",
+    "106": "P1", "107": "P1", "108": "P1", "109": "P1", "110": "P1",
+    "111": "P1", "112": "P1", "113": "P1", "114": "P1",
+
+    "201": "P1", "202": "P1", "203": "P1", "204": "P1", "205": "P1",
+    "206": "P1", "207": "P1", "208": "P1", "209": "P1", "210": "P1",
+    "211": "P1", "212": "P1", "213": "P1",
+    "2A1": "P1", "2A2": "P1", "2A3": "P1", "2L1": "P1", "2L2": "P1",
+
+    "301": "P1", "302": "P1", "303": "P1", "304": "P1", "305": "P1",
+    "306": "P1", "307": "P1", "308": "P1", "309": "P1", "310": "P1",
+    "311": "P1", "312": "P1", "313": "P1", "314": "P1",
+    "3L1": "P1", "3L2": "P1",
+
+    "P2-102": "P2", "P2-103": "P2", "P2-106": "P2", "P2-107": "P2",
+    "P2-108": "P2", "P2-109": "P2", "P2-202": "P2", "P2-203": "P2",
+    "P2-206": "P2", "P2-HUBS": "P2"
+  },
+
+  "apelidos": {
+    "103 - DESIGN THINKING": "103",
+    "113 (PRANCHETAS)": "113",
+    "114 - LAB QUIMICA": "114",
+    "114 LAB. QUIMICA": "114",
+    "114 - LAB. FISICA": "114",
+    "114 LAB. FISICA": "114",
+
+    "102 (P2)": "P2-102",
+    "103 (P2)": "P2-103",
+    "103 (P2) NPJ": "P2-103",
+    "103 (P2) - NPJ": "P2-103",
+    "106 (P2)": "P2-106",
+    "107 (P2) LAB. METROLOGIA": "P2-107",
+    "107 (P2) - LAB.METROLOGIA": "P2-107",
+    "108 (P2) LAB. HIDRAULICA": "P2-108",
+    "108 (P2) LAB.HIDRAULICA E PNEUMATICA": "P2-108",
+    "LAB. HIDRAULICA - 108 (P2)": "P2-108",
+    "109 (P2) LAB MAKER": "P2-109",
+    "202 (P2)": "P2-202",
+    "202 (P2) LAB.REDES": "P2-202",
+    "203 (P2)": "P2-203",
+    "206 (P2)": "P2-206",
+    "HUBS": "P2-HUBS"
+  },
+
+  "ignoradas": [
+    "CANCELADA",
+    "ONLINE",
+    "EAD",
+    "REMOTO",
+    "HIBRIDO",
+    "HIBRIDA",
+    "A DEFINIR",
+    "NAO DEFINIDA",
+    "VISITA",
+    "VISITA EXTERNA",
+    "NAO TEM REVISAO"
+  ],
+
+  "_concatenadas_vistas": [
+    "202/203", "210/211", "212/213", "2L1/2L2", "2L1/3L1",
+    "302/303", "304/305", "304/035", "311/312", "313/314", "3L1/3L2"
+  ]
+}

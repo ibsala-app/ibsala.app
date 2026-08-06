@@ -79,9 +79,9 @@ let salas = []
 
 async function carregarAgora() {
   const [mapa, inv] = await Promise.all([
-    sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala')
+    sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala,sala_canon')
       .eq('data', hojeISO()),
-    sb.from('salas').select('sala,predio').order('sala'),
+    sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
   ])
   if (mapa.error || inv.error) { toast('Sem conexão com o servidor.'); return }
   mapaHoje = mapa.data
@@ -105,9 +105,12 @@ async function carregarAgora() {
     rolando.push(r)
   }
 
+  // sala_canon vem do repertório (a captura traduz "103 - DESIGN THINKING" em
+  // "103"); comparar r.sala cru deixava a sala rotulada ocupada e livre ao
+  // mesmo tempo
   const ocupadas = new Set(
-    mapaHoje.filter((r) => horarioParaSlot(r.horario) === slot && r.sala)
-      .map((r) => r.sala))
+    mapaHoje.filter((r) => horarioParaSlot(r.horario) === slot && r.sala_canon)
+      .map((r) => r.sala_canon))
   const livres = slot ? salas.filter((s) => !ocupadas.has(s.sala)) : []
 
   $('livres-num').textContent = slot ? livres.length : '–'
