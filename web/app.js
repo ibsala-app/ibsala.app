@@ -1,5 +1,10 @@
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js'
 
+// ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
+// de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
+// no cutover (o SW do v1 derrubava o jsdelivr e sobrevivia por isso)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
+
 // supabase-js chega via bundle UMD (script defer no index) — 1 request, cache longo
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
@@ -426,8 +431,6 @@ sb.auth.onAuthStateChange((_ev, s) => {
   sessao = s
   carregarPerfil()
 })
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
 
 carregarAgora()
 setInterval(carregarAgora, 5 * 60 * 1000)
