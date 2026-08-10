@@ -73,16 +73,18 @@ def resolver_sala(bruta, rep):
     k = _chave(bruta)
     if not k:
         return None, "vazia"
-    if "/" in k:
-        # par concatenado ("302/303") é erro do sistema de origem: essa sala não
-        # existe e a linha não ocupa nada
-        return None, "ignorada"
     if k in rep["ignoradas"]:
         return None, "ignorada"
     if k in rep["salas"]:
         return rep["salas"][k], "canonica"
     if k in rep["apelidos"]:
         return rep["apelidos"][k], "apelido"
+    if "/" in k:
+        # par concatenado ("302/303") é erro do sistema de origem: essa sala não
+        # existe e a linha não ocupa nada. Vem DEPOIS do repertório porque existe
+        # rótulo com barra que não é par ("114 LAB QUIMICA/FISICA"): grafia
+        # cadastrada ganha da regra, senão a sala fica livre com aula dentro
+        return None, "ignorada"
     return None, "desconhecida"
 
 

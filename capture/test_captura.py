@@ -56,7 +56,7 @@ def test_apelido_vira_canonica(rep):
     # rótulo colado no número: ocupava a sala sem tirá-la da lista de livres
     assert resolver_sala("103 - DESIGN THINKING", rep) == ("103", "apelido")
     assert resolver_sala("113 (PRANCHETAS)", rep) == ("113", "apelido")
-    # as quatro grafias da 114 são a mesma sala
+    # as grafias da 114 são a mesma sala
     for g in ("114 - LAB QUIMICA", "114 LAB. QUIMICA",
               "114 - LAB. FISICA", "114 LAB. FISICA"):
         assert resolver_sala(g, rep)[0] == "114"
@@ -70,6 +70,10 @@ def test_apelido_do_p2_tolera_grafia(rep):
         assert resolver_sala(g, rep)[0] == "P2-108"
     assert resolver_sala("103 (P2) NPJ", rep)[0] == "P2-103"
     assert resolver_sala("HUBS", rep)[0] == "P2-HUBS"
+    # quarentena de 07/08: rótulo curto do maker e o lab de maquetes, que é
+    # sala nova (não aparecia em quatro meses de captura)
+    assert resolver_sala("109 (P2) MAKER", rep)[0] == "P2-109"
+    assert resolver_sala("204 (P2) LAB MAQUETES", rep) == ("P2-204", "apelido")
 
 
 def test_pseudo_sala_nao_ocupa_nem_existe(rep):
@@ -86,6 +90,12 @@ def test_concatenada_e_erro_do_sistema(rep):
     assert resolver_sala("304/035", rep) == (None, "ignorada")
     # regra por barra cobre par novo sem cadastro
     assert resolver_sala("305/306", rep) == (None, "ignorada")
+
+
+def test_rotulo_com_barra_ganha_da_regra(rep):
+    # '/' separando rótulo, não par de salas: a barra não pode engolir a sala,
+    # senão a 114 fica livre com aula de física dentro (visto em 10/08)
+    assert resolver_sala("114 LAB QUIMICA/FISICA", rep) == ("114", "apelido")
 
 
 def test_desconhecida_cai_na_quarentena(rep):
@@ -105,4 +115,4 @@ def test_repertorio_integro(rep):
     # apelido órfão apontaria pra sala inexistente e sumiria da conta
     assert all(c in rep["predio"] for c in rep["apelidos"].values())
     assert not set(rep["apelidos"]) & set(rep["salas"])
-    assert len(rep["predio"]) == 58
+    assert len(rep["predio"]) == 59

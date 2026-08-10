@@ -2,7 +2,7 @@
   "_doc": "Repertorio fixo de salas do Ibmec BH. Fonte unica de verdade, revisada sala a sala em 2026-08-06. Copia identica vive em app-salas/ (v1). O scraper NAO escreve aqui: grafia desconhecida vai pra quarentena.",
   "versao": "2026-08-06",
   "chave": "casamento por strip + colapso de espacos internos + upper + remocao de acento (NFD)",
-  "regra_barra": "grafia com '/' e erro do sistema de origem (a sala nao existe): ignorada, sem ocupacao. Cobre pares novos sem precisar cadastrar.",
+  "regra_barra": "grafia com '/' e erro do sistema de origem (a sala nao existe): ignorada, sem ocupacao. Cobre pares novos sem precisar cadastrar. Vale so pra grafia DESCONHECIDA: apelido cadastrado ganha da barra, porque existe rotulo com barra que nao e par ('114 LAB QUIMICA/FISICA').",
 
   "salas": {
     "101": "P1", "102": "P1", "103": "P1", "104": "P1", "105": "P1",
@@ -21,7 +21,7 @@
 
     "P2-102": "P2", "P2-103": "P2", "P2-106": "P2", "P2-107": "P2",
     "P2-108": "P2", "P2-109": "P2", "P2-202": "P2", "P2-203": "P2",
-    "P2-206": "P2", "P2-HUBS": "P2"
+    "P2-204": "P2", "P2-206": "P2", "P2-HUBS": "P2"
   },
 
   "apelidos": {
@@ -31,6 +31,7 @@
     "114 LAB. QUIMICA": "114",
     "114 - LAB. FISICA": "114",
     "114 LAB. FISICA": "114",
+    "114 LAB QUIMICA/FISICA": "114",
 
     "102 (P2)": "P2-102",
     "103 (P2)": "P2-103",
@@ -43,7 +44,9 @@
     "108 (P2) LAB.HIDRAULICA E PNEUMATICA": "P2-108",
     "LAB. HIDRAULICA - 108 (P2)": "P2-108",
     "109 (P2) LAB MAKER": "P2-109",
+    "109 (P2) MAKER": "P2-109",
     "202 (P2)": "P2-202",
+    "204 (P2) LAB MAQUETES": "P2-204",
     "202 (P2) LAB.REDES": "P2-202",
     "203 (P2)": "P2-203",
     "206 (P2)": "P2-206",
