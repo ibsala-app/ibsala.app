@@ -19,6 +19,7 @@
 // reintroduzir o defeito da 114.
 
 import repertorioJson from '../_shared/salas-repertorio.json' with { type: 'json' }
+import { segredoConfere } from '../_shared/cron.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -279,10 +280,15 @@ async function marcarFrescor(resumo: unknown) {
 // ── handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
-    return new Response('nope', { status: 401 })
-  }
+  if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const corpo = await req.json().catch(() => ({})) as { dry?: boolean; csv?: string }
+
+  // o campo `csv` existe só pro portão de paridade, que sempre manda dry: true.
+  // Fora do dry ele seria injeção de mapa inteiro no banco por quem tivesse o
+  // segredo do cron.
+  if (corpo.csv && !corpo.dry) {
+    return new Response('csv só é aceito em modo dry', { status: 400 })
+  }
 
   const texto = corpo.csv ?? await (async () => {
     const r = await fetch(EXPORT_URL, { headers: { 'User-Agent': 'ibsala-captura/2.0' } })
