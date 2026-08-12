@@ -309,6 +309,7 @@ async function carregarAgora({ ghost = false } = {}) {
   if (!mapa.data.length && diaUtil && slotAtual()) { falhaNoMapa({ vazio: true }); return }
 
   $('agora-falha').hidden = true
+  $('busca-sem-mapa').hidden = true
   mapaCarregado = true
   mapaHoje = mapa.data
   salas = inv.data
@@ -440,6 +441,7 @@ function falhaNoMapa({ vazio = false } = {}) {
   $('livres-grade').replaceChildren()
   $('board-agora').replaceChildren()
   $('agora-vazio').hidden = true
+  $('busca-sem-mapa').hidden = false
   if (perfil) pintarHoje()
   toast(vazio ? 'O mapa de hoje ainda não chegou.' : 'Não deu pra carregar o mapa de hoje.')
 }
@@ -1241,3 +1243,8 @@ if (!sb) {
   })
   window.addEventListener('online', () => { carregarAgora(); procurarAtualizacao() })
 }
+
+// última linha de propósito: se algo acima lançar, esta marca não aparece, e é
+// exatamente esse o estado que deixou a página pintada e sem NENHUM botão
+// funcionando em 12/08
+document.documentElement.dataset.app = 'pronto'

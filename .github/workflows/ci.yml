@@ -29,6 +29,18 @@ jobs:
           python-version: "3.12"
       - run: python scripts/contraste.py
 
+  smoke:
+    # o pior defeito de 12/08 (pagina pintada, nenhum botao respondendo) passava
+    # em qualquer teste de unidade: so aparece com o DOM renderizado
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/smoke.py
+
   gitleaks:
     runs-on: ubuntu-latest
     timeout-minutes: 5

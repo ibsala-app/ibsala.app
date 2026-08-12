@@ -9,7 +9,7 @@ custo zero e manutenção zero ("always free, set it and forget it").
 |---|---|---|
 | Banco + Auth + API | Supabase (Postgres, RLS, Auth Google) | free tier |
 | Frontend (PWA estática) | Cloudflare Pages | free |
-| Captura do mapa de salas | GitHub Actions (cron) | free |
+| Captura do mapa de salas | pg_cron + edge function `captura` | free |
 | Push notifications | Supabase Edge Function + pg_cron | free tier |
 
 Sem VM, sem Docker, sem `.env` em servidor. Secrets moram nas configurações
