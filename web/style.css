@@ -78,8 +78,12 @@
   --gap-col: 0px;
 }
 
+/* Paleta escura em DOIS lugares de propósito, e não é descuido: uma para quem
+   deixa o app seguir o sistema, outra para quem escolheu escuro no Ajustes. Sem
+   build step não dá pra ter uma fonte só, então `scripts/contraste.py` compara
+   os dois blocos token a token e o CI reprova se divergirem. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="claro"]) {
     color-scheme: dark;
     --bg: #0b0f17;
     --bg2: #141a28;
@@ -109,6 +113,38 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
     --shadow-md: 0 4px 16px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.35);
   }
+}
+
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+    color-scheme: dark;
+    --bg: #0b0f17;
+    --bg2: #141a28;
+    --bg3: #1c2436;
+    --surface: #161c2c;
+    --border: #2a3350;
+    --border-soft: #1f2740;
+    --blue: #6b9dff;
+    --blue-2: #5688e8;
+    --gold: #F5AC00;
+    --gold-dim: #d89700;
+    --gold-soft: #3a2a00;
+    --aviso: #f0b429;
+    --aviso-soft: #2a2008;
+    --aviso-borda: #4a3a17;
+    /* #dc2626 sobre o cartão escuro dava 4,45:1 e reprovava AA por pouco */
+    --perigo: #ff7a6b;
+    --text: #e8edf8;
+    --text-dim: #a8b4d0;
+    --text-muted: #8896c0; /* sólido; nunca opacity em texto */
+    /* no dark o azul da pill clareia, então texto branco cai pra ~3,4:1:
+       inverte pra texto escuro e volta pra ~5,4:1 */
+    --sobre-azul: #0b1220;
+    --gold-texto: #d89700;
+    --hover: #1d2436;
+    --press: #232c42;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.35);
 }
 
 * { box-sizing: border-box; margin: 0; }
@@ -946,6 +982,47 @@ body.bloqueado .rodape { display: none; }
   display: flex;
   flex-wrap: wrap;
   gap: 4px 20px;
-  padding-top: 20px;
+  padding-top: 10px;
 }
+/* `.saiba` carrega margin-top de 26px pro link avulso de fim de tela; dentro de
+   uma lista de links isso vira um buraco */
+.rodape-links .saiba { margin-top: 0; }
 .fim-pagina { padding-top: 24px; }
+
+
+/* ── Ajustes ─────────────────────────────────────────────────────────────── */
+
+/* seletor de 3 estados: mais claro que um switch quando a opção do meio é
+   "segue o sistema" */
+.segmentado {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.segmentado button {
+  font-family: var(--font);
+  font-size: var(--t-sm2);
+  font-weight: 700;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 9px 14px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.segmentado button.ativo {
+  color: var(--sobre-ouro);
+  background: var(--gold);
+}
+
+/* "Sair da conta" ficava colado em "Excluir minha conta", com a mesma cara e
+   alvo de 44px: no celular era um convite a errar */
+.acoes-fim {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
