@@ -5,8 +5,32 @@ import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js'
 // no cutover (o SW do v1 derrubava o jsdelivr e sobrevivia por isso)
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
 
-// supabase-js chega via bundle UMD (script defer no index) — 1 request, cache longo
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+// PWA instalada no iPhone não faz navegação nova quando o iOS traz o app de
+// volta do segundo plano: ele restaura a página que já estava na memória. Sem
+// navegação, nada é buscado, o worker novo não assume, e versão nova só aparecia
+// depois de matar o app na gaveta. Aqui o app procura atualização ao voltar pro
+// primeiro plano e recarrega UMA vez quando o worker novo toma o controle.
+const tinhaControlador = !!navigator.serviceWorker?.controller
+let recarregandoPraAtualizar = false
+navigator.serviceWorker?.addEventListener('controllerchange', () => {
+  // primeira instalação também dispara controllerchange, e aí recarregar é ruído
+  if (!tinhaControlador || recarregandoPraAtualizar) return
+  recarregandoPraAtualizar = true
+  location.reload()
+})
+async function procurarAtualizacao() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    await reg?.update()
+  } catch { /* offline, ou sem worker: tenta na próxima */ }
+}
+
+// supabase-js chega via bundle UMD self-hospedado (script defer no index).
+// O `?.` é cinto de segurança: quando isso vinha do jsdelivr e a rede bloqueava o
+// CDN, esta linha lançava e matava o módulo inteiro, então NENHUM botão da página
+// respondia (os listeners de clique nem chegavam a ser registrados). Agora, se o
+// bundle faltar, a navegação continua funcionando e o app diz o que aconteceu.
+const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY) ?? null
 
 // ── Slots (portado do v1) ────────────────────────────────────────────────────
 // Janela de vigência do slot, não o horário da aula: serve pra dizer "em que
@@ -141,6 +165,7 @@ let pronto = null
 
 // ── Faculdade agora ──────────────────────────────────────────────────────────
 async function carregarAgora({ ghost = false } = {}) {
+  if (!sb) return              // sem bundle não há o que buscar; o aviso já está na tela
   if (ghost) {
     $('livres-num').classList.add('ghost-num')
     ghostChips($('livres-grade'))
@@ -655,20 +680,36 @@ async function adicionarMateria(r, dia) {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-sb.auth.onAuthStateChange((_ev, s) => {
-  sessao = s
-  carregarPerfil()
-})
-
 aplicarIntencao('entrar')
 const telaInicial = location.hash.replace('#', '')
 history.replaceState({ tela: TELAS.includes(telaInicial) ? telaInicial : 'home' }, '', location.hash || '#')
 if (TELAS.includes(telaInicial) && telaInicial !== 'home') mostrar(telaInicial, { push: false })
 
-pronto = carregarAgora({ ghost: true })
-setInterval(() => carregarAgora(), 5 * 60 * 1000)
-setInterval(pintarAgora, 60 * 1000)          // relógio e contagem andam sem input
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) carregarAgora()       // PWA retomada não mostra número da véspera
-})
-window.addEventListener('online', () => carregarAgora())
+procurarAtualizacao()
+
+if (!sb) {
+  // bundle do supabase-js não chegou: em vez de a tela ficar muda com "–" e o
+  // aluno achar que o app está quebrado, diz o que houve e oferece recarregar
+  $('livres-num').classList.remove('ghost-num')
+  $('agora-falha').hidden = false
+  $('agora-falha').firstChild.textContent =
+    'Não deu pra carregar a biblioteca do app. Se você está numa rede que filtra ' +
+    'endereços, pode ser isso. '
+  $('busca-dica').textContent = 'Busca fora do ar até a página carregar por completo.'
+  $('btn-retry').onclick = () => location.reload()
+} else {
+  sb.auth.onAuthStateChange((_ev, s) => {
+    sessao = s
+    carregarPerfil()
+  })
+
+  pronto = carregarAgora({ ghost: true })
+  setInterval(() => carregarAgora(), 5 * 60 * 1000)
+  setInterval(pintarAgora, 60 * 1000)        // relógio e contagem andam sem input
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return
+    carregarAgora()          // PWA retomada não mostra número da véspera
+    procurarAtualizacao()    // nem versão da véspera
+  })
+  window.addEventListener('online', () => { carregarAgora(); procurarAtualizacao() })
+}
