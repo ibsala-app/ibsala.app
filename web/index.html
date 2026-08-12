@@ -73,7 +73,10 @@
         <button id="btn-menu-criar" class="btn-menu menor" data-vai="conta" data-intencao="criar">Criar conta</button>
       </nav>
 
-      <a class="saiba" href="privacidade.html">Privacidade e sobre o IBSALA →</a>
+      <p class="rodape-links">
+        <a class="saiba" href="privacidade.html">Privacidade e sobre o IBSALA →</a>
+        <a class="saiba" href="termos.html">Termos de uso →</a>
+      </p>
     </section>
 
     <!-- FACULDADE AGORA -->
@@ -137,6 +140,15 @@
       <button class="voltar" data-vai="home">← Voltar</button>
       <h1 class="tela-titulo" data-cabeca tabindex="-1">Sua conta</h1>
 
+      <!-- o cadastro tem 4 toques em 3 telas, com uma saída pro Google no meio,
+           e nada dizia em que passo a pessoa estava: os 7 cadastrados com zero
+           matéria são a assinatura disso -->
+      <ol id="passos" class="passos" aria-label="Etapas do cadastro" hidden>
+        <li data-passo="1"><span class="passo-num">1</span>Entrar com Google</li>
+        <li data-passo="2"><span class="passo-num">2</span>Escolher username</li>
+        <li data-passo="3"><span class="passo-num">3</span>Adicionar matérias</li>
+      </ol>
+
       <div id="conta-deslogado">
         <div class="painel-cabeca">
           <h2 class="painel-titulo" id="conta-titulo">Suas aulas, sua sala</h2>
@@ -144,6 +156,9 @@
             de cada horário.</p>
         </div>
         <button id="btn-login" class="btn-menu primario">Entrar com Google</button>
+        <p class="dica">Ao continuar você aceita os
+          <a class="link" href="termos.html">Termos de uso</a> e a
+          <a class="link" href="privacidade.html">Política de Privacidade</a>.</p>
       </div>
 
       <p id="conta-falha" class="falha" role="alert" hidden>Não deu pra carregar sua conta.
@@ -151,9 +166,11 @@
       </p>
 
       <div id="conta-cadastro" hidden>
-        <h2 class="secao">Escolha seu username</h2>
-        <p id="username-regra" class="dica">De 3 a 20 caracteres: letras, números, ponto e
-          underline.</p>
+        <h2 class="secao-forte">Escolha seu username</h2>
+
+        <p id="username-regra" class="dica">É como a liga te identifica no app, não precisa ser
+          seu nome real. De 3 a 20 caracteres: letras, números, ponto e underline.</p>
+
         <form id="form-username" class="linha-form">
           <input id="username-input" type="text" minlength="3" maxlength="20"
                  pattern="[a-zA-Z0-9_.]{3,20}" placeholder="ex.: joshazze" required
@@ -162,6 +179,14 @@
           <button class="botao-primario">Criar conta</button>
         </form>
         <p id="username-erro" class="erro" role="alert" hidden></p>
+
+        <label class="linha-aceite" for="chk-termos">
+          <input type="checkbox" id="chk-termos" class="caixa">
+          <span>Li e aceito os <a class="link" href="termos.html">Termos de uso</a> e a
+            <a class="link" href="privacidade.html">Política de Privacidade</a>.</span>
+        </label>
+
+        <button id="btn-cancelar-cadastro" class="botao-raso">Cancelar e sair</button>
       </div>
 
       <div id="conta-logado" hidden>
@@ -228,7 +253,7 @@
   </main>
 
   <footer class="rodape">
-    <p>© 2026 Joshua Azze &amp; IBtech — Todos os direitos reservados.</p>
+    <p>© 2026 Joshua Azze &amp; IBtech · Todos os direitos reservados.</p>
   </footer>
 
   <div id="toast" role="status"></div>
