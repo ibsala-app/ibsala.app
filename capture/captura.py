@@ -46,29 +46,81 @@ def _extrair_codigo(texto):
 
 
 def _chave(texto):
-    """Chave de casamento do repertório: sem acento, espaço interno colapsado,
-    maiúscula. A planilha escreve a mesma sala como '107 (P2) LAB. METROLOGIA'
-    e '107 (P2) - LAB.METROLOGIA', então comparar string crua não serve."""
-    return re.sub(r"\s+", " ", _sem_acento(texto)).strip().upper()
+    """Chave de casamento do repertório: sem acento, SEM pontuação, espaço
+    interno colapsado, maiúscula.
+
+    A planilha escreve a mesma sala como '107 (P2) LAB. METROLOGIA' e
+    '107 (P2) - LAB.METROLOGIA', e em 12/08 passou a escrever
+    '103 (DESIGN THINKING)' onde o repertório tinha '103 - DESIGN THINKING':
+    parêntese, hífen e ponto viravam sala desconhecida, a linha não ocupava nada
+    e a sala aparecia livre com aula dentro. Ignorar pontuação mata a classe do
+    defeito em vez de cadastrar mais uma variante por vez.
+
+    A BARRA sobrevive de propósito: `resolver_sala` depende dela pra tratar
+    rótulo com duas salas concatenadas.
+    """
+    k = re.sub(r"[().\-]", " ", _sem_acento(texto).upper())
+    return re.sub(r"\s+", " ", k).strip()
 
 
 def carregar_repertorio(caminho=REPERTORIO_PATH):
     """Lê salas-repertorio.json (fonte única, idêntica no repo do v1)."""
     with open(caminho, encoding="utf-8") as f:
         rep = json.load(f)
+    # Com chave insensível a pontuação, dois rótulos diferentes podem colapsar na
+    # mesma chave. Se apontarem pra salas diferentes é ambiguidade silenciosa, e
+    # é melhor a captura morrer aqui do que servir sala errada. A checagem tem
+    # que acontecer DURANTE a construção: montar o dict primeiro deixaria o
+    # último rótulo sobrescrever o anterior sem ninguém ver.
+    visto = {}          # chave -> (origem, rótulo, canônica)
+
+    def registrar(rotulo, canon, origem):
+        chave = _chave(rotulo)
+        anterior = visto.get(chave)
+        if anterior and anterior[2] != canon:
+            raise ValueError(
+                f"repertório ambíguo: a chave {chave!r} sai de "
+                f"{anterior[0]} {anterior[1]!r} -> {anterior[2]!r} e de "
+                f"{origem} {rotulo!r} -> {canon!r}"
+            )
+        visto[chave] = (origem, rotulo, canon)
+        return chave
+
+    salas, apelidos, ignoradas = {}, {}, set()
+    for s in rep["salas"]:
+        salas[registrar(s, s, "canonica")] = s
+    for a, c in rep["apelidos"].items():
+        apelidos[registrar(a, c, "apelido")] = c
+    for i in rep["ignoradas"]:
+        ignoradas.add(registrar(i, None, "ignorada"))
+
     return {
-        "salas": {_chave(s): s for s in rep["salas"]},
+        "salas": salas,
         "predio": dict(rep["salas"]),
-        "apelidos": {_chave(a): c for a, c in rep["apelidos"].items()},
-        "ignoradas": {_chave(i) for i in rep["ignoradas"]},
+        "apelidos": apelidos,
+        "ignoradas": ignoradas,
     }
+
+
+def _lados_da_barra(bruta, rep):
+    """Rótulo com barra -> lista de canônicas que cada lado resolve."""
+    achadas = []
+    for parte in str(bruta).split("/"):
+        k = _chave(parte)
+        if k in rep["salas"]:
+            achadas.append(rep["salas"][k])
+        elif k in rep["apelidos"]:
+            achadas.append(rep["apelidos"][k])
+    # sem duplicata, preservando a ordem em que a planilha escreveu
+    return list(dict.fromkeys(achadas))
 
 
 def resolver_sala(bruta, rep):
     """Grafia crua da planilha -> (canônica, motivo).
 
     canônica é None quando a linha não ocupa sala nenhuma. Motivos: 'canonica',
-    'apelido', 'ignorada', 'vazia', 'desconhecida'.
+    'apelido', 'apelido-barra', 'barra-multipla', 'ignorada', 'vazia',
+    'desconhecida'.
     """
     k = _chave(bruta)
     if not k:
@@ -80,25 +132,38 @@ def resolver_sala(bruta, rep):
     if k in rep["apelidos"]:
         return rep["apelidos"][k], "apelido"
     if "/" in k:
-        # par concatenado ("302/303") é erro do sistema de origem: essa sala não
-        # existe e a linha não ocupa nada. Vem DEPOIS do repertório porque existe
-        # rótulo com barra que não é par ("114 LAB QUIMICA/FISICA"): grafia
-        # cadastrada ganha da regra, senão a sala fica livre com aula dentro
+        # Antes: barra = par concatenado ("302/303"), erro da origem, não ocupa
+        # nada. Só que existe rótulo com barra onde UM lado é sala de verdade
+        # ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)", visto em 12/08): jogar o
+        # rótulo inteiro fora deixava a P2-206 livre com aula dentro.
+        lados = _lados_da_barra(bruta, rep)
+        if len(lados) == 1:
+            return lados[0], "apelido-barra"
+        if len(lados) > 1:
+            # duas salas de verdade concatenadas: ocupar as duas exige coluna
+            # nova (mapa_dia.salas_canon) e reverte a decisão de 06/08 sobre par
+            # concatenado. Até lá o comportamento não muda, mas o caso é LOGADO
+            # em vez de sumir
+            return None, "barra-multipla"
         return None, "ignorada"
     return None, "desconhecida"
 
 
 def anotar_canonicas(linhas, rep):
-    """Preenche sala_canon em cada linha. Devolve as grafias desconhecidas
-    (grafia crua -> nº de ocorrências) pra quarentena."""
+    """Preenche sala_canon em cada linha. Devolve (pendentes, multiplas):
+    grafia desconhecida -> nº de ocorrências (quarentena), e rótulo com barra
+    cujos dois lados são sala de verdade -> as canônicas que resolveriam."""
     pendentes = {}
+    multiplas = {}
     for l in linhas:
-        canon, motivo = resolver_sala(l.get("sala", ""), rep)
+        bruta = str(l.get("sala", "")).strip()
+        canon, motivo = resolver_sala(bruta, rep)
         l["sala_canon"] = canon
         if motivo == "desconhecida":
-            bruta = str(l.get("sala", "")).strip()
             pendentes[bruta] = pendentes.get(bruta, 0) + 1
-    return pendentes
+        elif motivo == "barra-multipla":
+            multiplas[bruta] = _lados_da_barra(bruta, rep)
+    return pendentes, multiplas
 
 
 def baixar_csv():
@@ -204,10 +269,14 @@ def enviar(linhas, rep, pendentes=None):
           "sala", "ignore-duplicates")
 
     # grafia fora do repertório fica em quarentena: não vira sala livre e espera
-    # revisão humana
+    # revisão humana. `visto_em` entra no payload porque sem ele a coluna guarda
+    # o PRIMEIRO avistamento pra sempre, e a quarentena não diz se a grafia
+    # ainda aparece na planilha de hoje
     if pendentes:
+        agora = datetime.now(BRT).isoformat()
         _post(f"{base}/salas_pendentes", key,
-              [{"alias": a, "ocorrencias": n} for a, n in pendentes.items()],
+              [{"alias": a, "ocorrencias": n, "visto_em": agora}
+               for a, n in pendentes.items()],
               "alias", "merge-duplicates")
 
 
@@ -224,12 +293,15 @@ def main():
     print(f"{len(linhas)} linhas: " + ", ".join(f"{c}={n}" for c, n in por_cat.items()))
 
     rep = carregar_repertorio()
-    pendentes = anotar_canonicas(linhas, rep)
+    pendentes, multiplas = anotar_canonicas(linhas, rep)
     ocupando = sum(1 for l in linhas if l["sala_canon"])
     print(f"{ocupando} linhas ocupam sala do repertório; "
           f"{len(linhas) - ocupando} sem sala (vazia, ignorada ou desconhecida)")
     if pendentes:
         print("quarentena: " + ", ".join(f"{a!r}x{n}" for a, n in pendentes.items()))
+    if multiplas:
+        print("barra com dois lados válidos (nenhuma sala ocupada, decisão pendente): "
+              + ", ".join(f"{a!r} -> {'+'.join(c)}" for a, c in multiplas.items()))
 
     if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
         enviar(linhas, rep, pendentes)

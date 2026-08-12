@@ -1,8 +1,8 @@
 {
   "_doc": "Repertorio fixo de salas do Ibmec BH. Fonte unica de verdade, revisada sala a sala em 2026-08-06. Copia identica vive em app-salas/ (v1). O scraper NAO escreve aqui: grafia desconhecida vai pra quarentena.",
-  "versao": "2026-08-06",
-  "chave": "casamento por strip + colapso de espacos internos + upper + remocao de acento (NFD)",
-  "regra_barra": "grafia com '/' e erro do sistema de origem (a sala nao existe): ignorada, sem ocupacao. Cobre pares novos sem precisar cadastrar. Vale so pra grafia DESCONHECIDA: apelido cadastrado ganha da barra, porque existe rotulo com barra que nao e par ('114 LAB QUIMICA/FISICA').",
+  "versao": "2026-08-12",
+  "chave": "casamento por strip + colapso de espacos internos + upper + remocao de acento (NFD) + remocao de pontuacao ( ) - . — a BARRA sobrevive, porque regra_barra depende dela. Pontuacao entrou em 12/08/2026: a planilha trocou '103 - DESIGN THINKING' por '103 (DESIGN THINKING)', a grafia caiu na quarentena e a 103 apareceu livre com evento dentro. Efeito colateral bom: variante nova da mesma sala nao precisa mais de apelido novo. O load da captura MORRE se dois rotulos colapsarem na mesma chave apontando pra salas diferentes.",
+  "regra_barra": "grafia com '/' desconhecida: resolver cada lado contra canonicas e apelidos. UM lado resolve -> ocupa esse lado (visto em 12/08: '207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)' deixava a P2-206 livre com aula dentro). DOIS OU MAIS lados resolvem ('302/303') -> nao ocupa nada, comportamento de 06/08 mantido, mas o caso e logado pra decidir com volume medido; ocupar as duas exige coluna mapa_dia.salas_canon. NENHUM lado resolve -> ignorada. Apelido cadastrado continua ganhando da regra, porque existe rotulo com barra que nao e par ('114 LAB QUIMICA/FISICA').",
 
   "salas": {
     "101": "P1", "102": "P1", "103": "P1", "104": "P1", "105": "P1",
@@ -64,7 +64,10 @@
     "NAO DEFINIDA",
     "VISITA",
     "VISITA EXTERNA",
-    "NAO TEM REVISAO"
+    "NAO TEM REVISAO",
+
+    "AUDITORIO",
+    "FOYER"
   ],
 
   "_concatenadas_vistas": [
