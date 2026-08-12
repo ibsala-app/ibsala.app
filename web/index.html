@@ -90,7 +90,9 @@
             <div id="livres-grade" class="grade-salas"></div>
           </div>
 
-          <p id="agora-falha" class="falha" hidden>Não deu pra carregar o mapa.
+          <p id="agora-falha" class="falha" hidden>Não deu pra carregar o mapa de hoje.
+            Se você está na rede da faculdade, ela pode estar bloqueando o servidor do app:
+            tenta pelo 4G ou 5G.
             <button id="btn-retry" class="mini">Tentar de novo</button>
           </p>
         </div>
@@ -116,6 +118,10 @@
       </label>
       <p id="busca-dica" class="vazio">Digite duas letras pra começar. Quem tem aula hoje vem
         primeiro, com sala e horário; o resto aparece como catálogo.</p>
+      <p id="busca-sem-mapa" class="falha" hidden>O mapa de hoje não carregou, então não sei
+        quais destas têm aula agora.
+        <button id="btn-recarregar" class="mini">Recarregar</button>
+      </p>
       <ol id="busca-lista" class="board"></ol>
       <p id="busca-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
         capturado do mapa oficial, e sala e horário existem para as aulas de hoje.</p>
