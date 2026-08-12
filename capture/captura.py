@@ -12,8 +12,9 @@ import os
 import re
 import sys
 import unicodedata
+import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 # o repertório mora dentro de supabase/functions/_shared/ porque o bundle da
@@ -250,38 +251,68 @@ def _post(url, key, payload, on_conflict, resolution):
         return resp.status
 
 
+def _chave_merge(l):
+    """Espelha o merge_key gerado pelo banco (0001): os 6 campos, sem a sala."""
+    return "|".join(str(l.get(c) or "") for c in
+                    ("categoria", "turma", "codigo", "disciplina", "horario", "professor"))
+
+
+def _apagar_fantasmas(base, key, dia, inicio):
+    """Apaga o que a planilha não tem mais. Ver o comentário longo na edge
+    function: sem `capturado` no payload do upsert isto comeria dado bom."""
+    url = (f"{base}/mapa_dia?select=id&data=eq.{dia}"
+           f"&capturado=lt.{urllib.parse.quote(inicio)}")
+    req = urllib.request.Request(url, headers={
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Prefer": "return=representation",
+    }, method="DELETE")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return len(json.loads(resp.read().decode()))
+
+
 def enviar(linhas, rep, pendentes=None):
     base = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1"
     key = os.environ["SUPABASE_SERVICE_KEY"]
+    inicio = datetime.now(timezone.utc).isoformat()
+
+    # dedupe pela chave de 6 campos ANTES de escrever: duas linhas iguais nelas e
+    # diferentes só na sala fazem o Postgres levantar 21000 e a rodada inteira
+    # morre sem escrever nada. Era o keep="last" que o v1 fazia no pandas.
+    unicas = {_chave_merge(l): l for l in linhas}
+    payload = [{**l, "capturado": inicio} for l in unicas.values()]
 
     # mapa do dia: mesma semântica do keep="last" do v1 (atualiza a sala)
-    _post(f"{base}/mapa_dia", key, linhas, "data,merge_key", "merge-duplicates")
+    _post(f"{base}/mapa_dia", key, payload, "data,merge_key", "merge-duplicates")
+    apagadas = _apagar_fantasmas(base, key, payload[0]["data"], inicio)
 
     # side-effect do v1: catálogo de disciplinas
     disc = {l["codigo"]: {
         "codigo": l["codigo"], "turma": l["turma"],
         "disciplina": l["disciplina"], "professor": l["professor"],
+        "atualizado": inicio,
     } for l in linhas if l["codigo"]}
     if disc:
         _post(f"{base}/disciplinas_historico", key, list(disc.values()),
               "codigo", "merge-duplicates")
 
     # o repertório manda: sala nova nasce no JSON, não no que a planilha cospe.
-    # upsert idempotente pra dispensar migration quando uma sala é acrescentada
+    # merge e não ignore: com ignore, corrigir o prédio no JSON nunca chegava lá
     _post(f"{base}/salas", key,
           [{"sala": s, "predio": p} for s, p in rep["predio"].items()],
-          "sala", "ignore-duplicates")
+          "sala", "merge-duplicates")
 
     # grafia fora do repertório fica em quarentena: não vira sala livre e espera
     # revisão humana. `visto_em` entra no payload porque sem ele a coluna guarda
     # o PRIMEIRO avistamento pra sempre, e a quarentena não diz se a grafia
     # ainda aparece na planilha de hoje
     if pendentes:
-        agora = datetime.now(BRT).isoformat()
         _post(f"{base}/salas_pendentes", key,
-              [{"alias": a, "ocorrencias": n, "visto_em": agora}
+              [{"alias": a, "ocorrencias": n, "visto_em": inicio}
                for a, n in pendentes.items()],
               "alias", "merge-duplicates")
+
+    return {"apagadas": apagadas, "duplicadas": len(linhas) - len(payload)}
 
 
 def main():
