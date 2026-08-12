@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-11'
+const CACHE = 'ibsala-v5-12'
 const SHELL = ['/', '/style.css', '/app.js', '/config.js', '/manifest.json',
   '/vendor/supabase.min.js',
   '/fonts/inter-latin.woff2', '/fonts/inter-latin-ext.woff2',
@@ -24,14 +24,20 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match('/')))
     return
   }
+  // REDE PRIMEIRO, cache de reserva. Era cache-primeiro, e isso custou caro:
+  // depois de cada deploy o aluno ficava com o CSS e o JS velhos até a página
+  // recarregar DUAS vezes, então conserto no ar aparecia como "não consertou"
+  // (aconteceu três vezes em 12/08: barra de status, alinhamento das colunas e
+  // botão colado). O arquivo versionado (fonte, bundle) tem Cache-Control
+  // immutable, então o cache HTTP do navegador segura o tráfego de qualquer jeito.
   e.respondWith(
-    caches.match(e.request).then((hit) => hit ?? fetch(e.request).then((resp) => {
+    fetch(e.request).then((resp) => {
       if (resp.ok) {
         const clone = resp.clone()
         caches.open(CACHE).then((c) => c.put(e.request, clone))
       }
       return resp
-    })))
+    }).catch(() => caches.match(e.request)))
 })
 
 self.addEventListener('push', (e) => {

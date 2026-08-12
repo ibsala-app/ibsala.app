@@ -350,7 +350,7 @@ function cardAula(r) {
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
     <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}${esc(rotuloCru(r))}</span>`)
-  if (perfil && r.codigo) el.append(acoesAdicionar(r))
+  if (perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
   return el
 }
 
@@ -363,13 +363,16 @@ function cardCatalogo(r) {
   return el
 }
 
-function acoesAdicionar(r) {
+function acoesAdicionar(r, { dia } = {}) {
   const acoes = document.createElement('span')
   acoes.className = 'acoes'
   const sel = document.createElement('select')
   sel.className = 'mini'
   sel.setAttribute('aria-label', 'Dia da semana')
   sel.innerHTML = DIAS.map((d, i) => (i ? `<option value="${i}">${d}</option>` : '')).join('')
+  // aula que acontece HOJE já vem com hoje escolhido: o padrão cego em SEG
+  // fazia o aluno cadastrar a matéria no dia errado e nunca receber o aviso
+  if (dia) sel.value = String(dia)
   const btn = document.createElement('button')
   btn.className = 'mini'
   btn.textContent = 'Adicionar'
@@ -394,6 +397,8 @@ function aplicarIntencao(qual) {
 }
 
 function mostrarConta() {
+  $('cta-conta').hidden = !!perfil       // logado não precisa ver "Criar conta"
+  $('materias-cta').hidden = !perfil
   $('conta-deslogado').hidden = !!sessao
   $('conta-cadastro').hidden = !(sessao && !perfil)
   $('conta-logado').hidden = !(sessao && perfil)
@@ -625,8 +630,12 @@ $('form-username').addEventListener('submit', async (e) => {
 async function carregarMinhas() {
   ghostLinhas($('lista-materias'), 3)
   ghostLinhas($('board-hoje'), 2)
+  // filtro explicito por aluno: a policy de materias é
+  // `aluno_id = auth.uid() OR is_admin()`, então admin sem WHERE enxerga a
+  // matéria de TODO MUNDO e "Minhas matérias" listava as 79 dos 18 alunos
   const { data, error } = await sb.from('materias')
     .select('id,dia,turma,disciplina,professor,codigo')
+    .eq('aluno_id', sessao.user.id)
     .order('dia').order('disciplina')
   if (error) return
   const lista = $('lista-materias')
