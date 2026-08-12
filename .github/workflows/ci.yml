@@ -36,9 +36,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # o bump de versao se mede contra origin/main, entao o historico
+          # precisa vir junto (mesmo motivo do job gitleaks)
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # HTML, JS, CSS e service worker apontando pro mesmo ?v=. Sem isso o
+      # navegador pareia HTML novo com JS de ate 4 horas atras, que foi o
+      # IBSALA-F de 12/08
+      - run: python scripts/versao.py --base origin/main
       - run: python scripts/smoke.py
 
   gitleaks:

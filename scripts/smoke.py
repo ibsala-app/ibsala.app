@@ -114,6 +114,10 @@ def main():
     ok &= conferir('degradado', [
         ('o módulo app.js roda até a última linha',
          'data-app="pronto"' in html),
+        # sem esta linha a falha de id ausente aparecia como "esperava pronto,
+        # veio nada", e o motivo (o HTML não tem o id que o JS procura) ficava
+        # escondido. IBSALA-F, 12/08.
+        ('nenhum id do JS falta no HTML', 'data-app="incompleto"' not in html),
         ('a home mostra o título', 'Salas do Ibmec BH' in html),
         ('os quatro caminhos do menu existem', html.count('class="btn-menu') >= 3),
         ('o cabeçalho vive pelo relógio, sem servidor',
