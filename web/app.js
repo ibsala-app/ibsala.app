@@ -205,7 +205,9 @@ async function carregarAgora({ ghost = false } = {}) {
   pintarAgora()
 }
 
-function pintarAgora() {
+// Data, turno e contagem pro próximo slot saem do RELÓGIO, não do servidor.
+// Ficavam em "—" quando a rede falhava, e o cabeçalho parecia morto sem motivo.
+function pintarRelogio() {
   const slot = slotAtual()
   const d = agoraBRT()
   const min = minutosAgora()
@@ -221,6 +223,12 @@ function pintarAgora() {
   if (falta != null && falta <= 90) {
     $('pill-troca').textContent = falta <= 1 ? 'troca agora' : `troca em ${falta} min`
   }
+}
+
+function pintarAgora() {
+  pintarRelogio()
+  const slot = slotAtual()
+  const min = minutosAgora()
 
   const ocupadas = new Set(
     slot
@@ -286,11 +294,15 @@ function pintarAgora() {
 
 function falhaNoMapa() {
   mapaCarregado = false
+  pintarRelogio()                       // data e turno não dependem do servidor
   $('agora-falha').hidden = false
   $('livres-num').classList.remove('ghost-num')
   $('livres-num').textContent = '–'
+  $('livres-rotulo').textContent = 'não deu pra saber quais salas estão livres'
+  $('pill-livres').textContent = 'sem mapa'
   $('livres-grade').replaceChildren()
   $('board-agora').replaceChildren()
+  $('agora-vazio').hidden = true
   toast('Não deu pra carregar o mapa de hoje.')
 }
 
@@ -760,6 +772,7 @@ history.replaceState({ tela: TELAS.includes(telaInicial) ? telaInicial : 'home' 
 if (TELAS.includes(telaInicial) && telaInicial !== 'home') mostrar(telaInicial, { push: false })
 
 procurarAtualizacao()
+pintarRelogio()          // cabeçalho vivo desde o primeiro quadro, sem esperar rede
 
 if (!sb) {
   // bundle do supabase-js não chegou: em vez de a tela ficar muda com "–" e o
@@ -779,7 +792,7 @@ if (!sb) {
 
   pronto = carregarAgora({ ghost: true })
   setInterval(() => carregarAgora(), 5 * 60 * 1000)
-  setInterval(pintarAgora, 60 * 1000)        // relógio e contagem andam sem input
+  setInterval(() => (mapaCarregado ? pintarAgora() : pintarRelogio()), 60 * 1000)
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return
     carregarAgora()          // PWA retomada não mostra número da véspera
