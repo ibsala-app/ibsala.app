@@ -612,22 +612,29 @@ async function carregarMinhas() {
   const hoje = agoraBRT().getDay()
   const deHoje = data.filter((m) => m.dia === hoje)
   const board = $('board-hoje')
-  board.replaceChildren(...deHoje.flatMap((m) => {
-    // a mesma disciplina pode ter duas sessões no dia; pegar só a primeira
-    // escondia a segunda sala
+
+  // "Hoje" é uma agenda, então ordena por HORÁRIO, não por nome de disciplina:
+  // a query vem por `disciplina` e isso punha a aula de 09:50 antes da de 07:30.
+  // A mesma disciplina pode ter duas sessões no dia; pegar só a primeira
+  // escondia a segunda sala.
+  const linhasHoje = deHoje.flatMap((m) => {
     const aulas = mapaHoje.filter((r) => (m.codigo && r.codigo === m.codigo) ||
       (!m.codigo && r.disciplina === m.disciplina))
-    if (!aulas.length) {
-      return [li(`
-        <span class="disc">${esc(m.disciplina)}</span>
-        <span class="sala sala-vazia">—</span>
-        <span class="meta">sem sala no mapa de hoje · ${esc(m.turma)}</span>`)]
-    }
-    return aulas.map((a) => li(`
+    if (!aulas.length) return [{ m, aula: null, ini: Infinity }]
+    return aulas.map((a) => ({ m, aula: a, ini: faixaHoraria(a.horario)?.[0] ?? Infinity }))
+  })
+  // sem horário conhecido vai pro fim, e empate desempata por disciplina
+  linhasHoje.sort((a, b) => a.ini - b.ini || a.m.disciplina.localeCompare(b.m.disciplina, 'pt-BR'))
+
+  board.replaceChildren(...linhasHoje.map(({ m, aula }) => (aula
+    ? li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala">${esc(a.sala || '—')}</span>
-      <span class="meta">${esc(a.horario)} · ${esc(m.turma)}</span>`))
-  }))
+      <span class="sala">${esc(aula.sala || '—')}</span>
+      <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}</span>`)
+    : li(`
+      <span class="disc">${esc(m.disciplina)}</span>
+      <span class="sala sala-vazia">—</span>
+      <span class="meta">sem sala no mapa de hoje · ${esc(m.turma)}</span>`))))
   $('hoje-vazio').hidden = deHoje.length > 0
 }
 
