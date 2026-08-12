@@ -62,7 +62,7 @@ const SLOTS = {
 }
 const DIAS = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
 const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO']
-const TELAS = ['home', 'agora', 'buscar', 'conta']
+const TELAS = ['home', 'agora', 'buscar', 'conta', 'ajustes', 'admin']
 // muda junto com o texto de termos.html; é o que fica gravado em alunos
 const TERMOS_VERSAO = '1-2026-08-12'
 
@@ -108,6 +108,26 @@ function proximoSlot(min) {
   return null
 }
 
+// ── Tema ─────────────────────────────────────────────────────────────────────
+// Só existia o do sistema. Quem usa o celular no claro e prefere o app escuro
+// (ou o contrário) não tinha o que fazer. Fica no aparelho, não na conta.
+const TEMA_CHAVE = 'ibsala:tema'
+function aplicarTema(qual) {
+  const escolha = ['claro', 'escuro'].includes(qual) ? qual : 'sistema'
+  if (escolha === 'sistema') document.documentElement.removeAttribute('data-tema')
+  else document.documentElement.setAttribute('data-tema', escolha)
+  try {
+    if (escolha === 'sistema') localStorage.removeItem(TEMA_CHAVE)
+    else localStorage.setItem(TEMA_CHAVE, escolha)
+  } catch { /* navegação privada: vale só nesta aba */ }
+  return escolha
+}
+function temaGuardado() {
+  try { return localStorage.getItem(TEMA_CHAVE) ?? 'sistema' } catch { return 'sistema' }
+}
+// antes do primeiro quadro, senão a tela pisca no tema errado
+aplicarTema(temaGuardado())
+
 // ── UI helpers ───────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id)
 let toastTimer
@@ -148,8 +168,14 @@ function ghostChips(el, n = 12) {
 // ── Navegação (com history, pra o gesto de voltar não fechar a PWA) ──────────
 let telaAtual = 'home'
 
+// telas que só existem pra quem tem conta: digitar #ajustes deslogado abria uma
+// tela de configurações vazia, sem dizer por quê
+const TELAS_LOGADO = ['ajustes', 'admin']
+
 function mostrar(tela, { push = true } = {}) {
   if (!TELAS.includes(tela)) tela = 'home'
+  if (TELAS_LOGADO.includes(tela) && !perfil) tela = 'conta'
+  if (tela === 'admin' && perfil?.role !== 'admin') tela = 'conta'
   document.querySelectorAll('.tela').forEach((x) => x.classList.remove('ativa'))
   const secao = $(`tela-${tela}`)
   secao.classList.add('ativa')
@@ -649,8 +675,13 @@ async function carregarPerfil() {
     tocarUltimoAcesso()
     carregarMinhas()
     atualizarBotaoPush()
-    $('bloco-admin').hidden = perfil.role !== 'admin'
-    if (perfil.role === 'admin') carregarAdmin()
+    $('novo-username').value = perfil.username
+    $('ajustes-email').textContent = `Entrando com o Google, como ${perfil.email}.`
+    $('chk-email').checked = perfil.receber_email !== false
+    const adm = perfil.role === 'admin'
+    $('bloco-admin').hidden = !adm
+    $('btn-abrir-admin').hidden = !adm
+    if (adm) carregarAdmin()
   }
 }
 
@@ -781,6 +812,68 @@ $('chk-push').addEventListener('change', async (e) => {
   }
 })
 
+// ── Ajustes ──────────────────────────────────────────────────────────────────
+for (const b of $('tema').children) {
+  b.addEventListener('click', () => {
+    const escolha = aplicarTema(b.dataset.tema)
+    pintarTema(escolha)
+  })
+}
+function pintarTema(escolha) {
+  for (const b of $('tema').children) {
+    const ativo = b.dataset.tema === escolha
+    b.classList.toggle('ativo', ativo)
+    b.setAttribute('aria-checked', String(ativo))
+  }
+}
+pintarTema(temaGuardado())
+
+$('ajustes-versao').textContent = `IBSALA v5 · termos versão ${TERMOS_VERSAO}`
+
+$('form-trocar-username').addEventListener('submit', (e) => {
+  e.preventDefault()
+  const btn = e.target.querySelector('button')
+  return ocupado(btn, async () => {
+    const u = $('novo-username').value.trim()
+    $('username-troca-erro').hidden = true
+    if (u === perfil?.username) { toast('Esse já é o seu username.'); return }
+
+    const { data: livre, error: eCheca } = await chamar(
+      sb.rpc('username_disponivel', { candidato: u }))
+    if (eCheca) { mostrarErro('username-troca-erro', eCheca.msg); return }
+    if (!livre) { mostrarErro('username-troca-erro', 'Esse username já existe. Tenta outro.'); return }
+
+    const { error } = await chamar(sb.from('alunos')
+      .update({ username: u }).eq('id', sessao.user.id))
+    if (error) {
+      mostrarErro('username-troca-erro', error.tipo === 'duplicado'
+        ? 'Esse username já existe. Tenta outro.' : error.msg)
+      return
+    }
+    toast(`Agora você é ${u}.`)
+    carregarPerfil()
+  })
+})
+
+// `receber_email` existe no schema desde a 0001 e NUNCA foi exposto nem lido:
+// o app manda email e o aluno não tinha como desligar
+$('chk-email').addEventListener('change', (e) => {
+  const chk = e.target
+  const quer = chk.checked
+  return ocupado(chk, async () => {
+    const { error } = await chamar(sb.from('alunos')
+      .update({ receber_email: quer }).eq('id', sessao.user.id))
+    if (error) { chk.checked = !quer; toast(error.msg); return }
+    perfil.receber_email = quer
+    toast(quer ? 'Você volta a receber email do IBSALA.' : 'Emails desligados.')
+  })
+})
+
+function mostrarErro(id, msg) {
+  $(id).textContent = msg
+  $(id).hidden = !msg
+}
+
 // ── Reclamações / dados (LGPD) ───────────────────────────────────────────────
 $('form-reclamacao').addEventListener('submit', (e) => {
   e.preventDefault()
@@ -814,27 +907,24 @@ $('btn-export').addEventListener('click', (ev) => ocupado(ev.currentTarget, asyn
   toast('Arquivo com seus dados gerado.')
 }))
 
-let excluirArmado = false
-$('btn-excluir').addEventListener('click', async () => {
-  if (!excluirArmado) {
-    excluirArmado = true
-    $('btn-excluir').textContent = 'Tem certeza? Toque de novo pra apagar tudo'
-    setTimeout(() => {
-      excluirArmado = false
-      $('btn-excluir').textContent = 'Excluir minha conta'
-    }, 6000)
-    return
-  }
-  await ocupado($('btn-excluir'), async () => {
-    const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000)
-    if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
-    // se o signOut remoto falhar, a sessão de uma conta que não existe mais
-    // fica no aparelho e TODA query passa a falhar em silêncio
-    await sb.auth.signOut().catch(() => sb.auth.signOut({ scope: 'local' }))
-    mostrar('home')
-    toast('Conta e dados excluídos.')
-  })
+$('btn-excluir').addEventListener('click', () => {
+  $('excluir-confirma').hidden = false
+  $('btn-excluir-confirma').focus()
 })
+$('btn-excluir-cancela').addEventListener('click', () => {
+  $('excluir-confirma').hidden = true
+  $('btn-excluir').focus()
+})
+$('btn-excluir-confirma').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+  const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000)
+  if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
+  // se o signOut remoto falhar, a sessão de uma conta que não existe mais fica
+  // no aparelho e TODA query passa a falhar em silêncio
+  await sb.auth.signOut().catch(() => sb.auth.signOut({ scope: 'local' }))
+  $('excluir-confirma').hidden = true
+  mostrar('home')
+  toast('Conta e dados excluídos.')
+}))
 
 // ── Admin ────────────────────────────────────────────────────────────────────
 async function carregarAdmin() {
@@ -887,6 +977,7 @@ async function carregarAdmin() {
     return el
   }))
   $('admin-reclamacoes-vazio').hidden = (recs.data ?? []).length > 0
+  $('admin-alunos-vazio').hidden = (todos.data ?? []).length > 0
 
   const la = $('admin-alunos')
   la.replaceChildren(...(todos.data ?? []).map((a) => {
@@ -978,8 +1069,7 @@ $('form-username').addEventListener('submit', (e) => {
 // erro do cadastro fica ao lado do campo. Em toast ele sumia em 3,2 segundos,
 // no canto da tela, no passo mais importante do app
 function mostrarErroUsername(msg) {
-  $('username-erro').textContent = msg
-  $('username-erro').hidden = !msg
+  mostrarErro('username-erro', msg)
 }
 
 async function carregarMinhas() {

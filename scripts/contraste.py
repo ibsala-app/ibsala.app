@@ -55,15 +55,36 @@ PARES = [
 ]
 
 
+TOKEN = r'--([\w-]+):\s*(#[0-9a-fA-F]{3,8})\s*;'
+
+
 def ler_paletas(caminho):
     css = open(caminho, encoding='utf-8').read()
     # :root base
     base = re.search(r':root\s*\{(.*?)\}', css, re.S).group(1)
-    claro = dict(re.findall(r'--([\w-]+):\s*(#[0-9a-fA-F]{3,8})\s*;', base))
-    # primeiro bloco dark que redefine :root
-    dark = re.search(r'@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{(.*?)\}', css, re.S)
+    claro = dict(re.findall(TOKEN, base))
+
+    # A paleta escura mora em DOIS blocos: o do sistema
+    # (`:root:not([data-tema="claro"])` dentro do @media) e o da escolha manual
+    # (`:root[data-tema="escuro"]`). Sem build step não dá pra ter uma fonte só,
+    # então aqui os dois são lidos e comparados: divergência reprova o CI, senão
+    # um conserto de contraste entra num tema e esquece o outro.
+    sistema = re.search(
+        r'@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-tema="claro"\]\)\s*\{(.*?)\n  \}',
+        css, re.S)
+    manual = re.search(r':root\[data-tema="escuro"\]\s*\{(.*?)\n\}', css, re.S)
+    if not sistema or not manual:
+        raise SystemExit('nao achei as duas paletas escuras (@media e [data-tema="escuro"])')
+
+    t_sistema = dict(re.findall(TOKEN, sistema.group(1)))
+    t_manual = dict(re.findall(TOKEN, manual.group(1)))
+    if t_sistema != t_manual:
+        difs = {k for k in set(t_sistema) | set(t_manual)
+                if t_sistema.get(k) != t_manual.get(k)}
+        raise SystemExit('paletas escuras divergem em: ' + ', '.join(sorted(difs)))
+
     escuro = dict(claro)
-    escuro.update(dict(re.findall(r'--([\w-]+):\s*(#[0-9a-fA-F]{3,8})\s*;', dark.group(1))))
+    escuro.update(t_sistema)
     return {'claro': claro, 'escuro': escuro}
 
 

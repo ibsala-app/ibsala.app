@@ -195,7 +195,9 @@
             <h2 class="secao">Hoje</h2>
             <ol id="board-hoje" class="board"></ol>
             <p id="hoje-vazio" class="vazio" hidden>Sem aulas suas no mapa de hoje.</p>
+          </div>
 
+          <div class="coluna">
             <h2 class="secao">Minhas matérias</h2>
             <ol id="lista-materias" class="board"></ol>
             <p id="materias-falha" class="falha" role="alert" hidden>Não deu pra carregar suas
@@ -204,48 +206,113 @@
               Busque a disciplina na planilha e use o botão Adicionar com o dia da semana.</p>
             <button id="materias-cta" class="btn-menu primario" data-vai="buscar" hidden>Adicionar matérias</button>
           </div>
-
-          <div class="coluna">
-            <h2 class="secao">Avisos de sala</h2>
-            <label class="linha-switch" for="chk-push">
-              <span id="push-rotulo" class="linha-switch-texto">Avisos neste aparelho</span>
-              <input type="checkbox" id="chk-push" class="switch" role="switch">
-            </label>
-            <p id="push-dica" class="vazio">Você recebe a sala de cada aula ~50 minutos antes
-              do horário.</p>
-
-            <h2 class="secao">Reportar problema</h2>
-            <form id="form-reclamacao" class="linha-form">
-              <input id="reclamacao-input" type="text" maxlength="500"
-                     placeholder="Descreva o problema" required aria-label="Descrição do problema">
-              <button class="botao-primario">Enviar</button>
-            </form>
-
-            <h2 class="secao">Seus dados</h2>
-            <div class="acoes-conta">
-              <button id="btn-export" class="botao-raso">Exportar meus dados</button>
-              <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
-              <button id="btn-sair" class="botao-raso">Sair da conta</button>
-            </div>
-          </div>
         </div>
 
-        <div id="bloco-admin" hidden>
-          <h2 class="secao">Admin · site</h2>
-          <p id="admin-falha" class="falha" role="alert" hidden>O painel de admin não
-            respondeu.</p>
-          <button id="btn-trava" class="btn-menu" hidden>Travar o site</button>
+        <div class="acoes-conta acoes-fim">
+          <button class="botao-raso" data-vai="ajustes">Ajustes da conta</button>
+          <button id="btn-abrir-admin" class="botao-raso" data-vai="admin" hidden>Painel do admin</button>
+        </div>
+      </div>
+    </section>
 
-          <div class="colunas">
-            <div class="coluna">
-              <h2 class="secao">Admin · reclamações</h2>
-              <ol id="admin-reclamacoes" class="board"></ol>
-              <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
-            </div>
-            <div class="coluna">
-              <h2 class="secao">Admin · alunos</h2>
-              <ol id="admin-alunos" class="board"></ol>
-            </div>
+    <!-- AJUSTES -->
+    <section id="tela-ajustes" class="tela">
+      <button class="voltar" data-vai="conta">← Voltar</button>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Ajustes</h1>
+
+      <div class="colunas">
+        <div class="coluna">
+          <h2 class="secao-forte">Conta</h2>
+          <p class="dica" id="ajustes-email">Entrando com o Google.</p>
+          <form id="form-trocar-username" class="linha-form">
+            <input id="novo-username" type="text" minlength="3" maxlength="20"
+                   pattern="[a-zA-Z0-9_.]{3,20}" required aria-label="Novo username"
+                   title="De 3 a 20 caracteres: letras, números, ponto e underline">
+            <button class="botao-primario">Trocar</button>
+          </form>
+          <p id="username-troca-erro" class="erro" role="alert" hidden></p>
+
+          <h2 class="secao-forte">Avisos de sala</h2>
+          <label class="linha-switch" for="chk-push">
+            <span id="push-rotulo" class="linha-switch-texto">Avisos neste aparelho</span>
+            <input type="checkbox" id="chk-push" class="switch" role="switch">
+          </label>
+          <p id="push-dica" class="dica">Você recebe a sala de cada aula ~50 minutos antes
+            do horário.</p>
+          <label class="linha-switch" for="chk-email">
+            <span class="linha-switch-texto">Emails do IBSALA</span>
+            <input type="checkbox" id="chk-email" class="switch" role="switch">
+          </label>
+          <p class="dica">Avisos da liga por email, tipo mudança grande no app. O email de
+            boas-vindas e o de exclusão de conta são sempre enviados.</p>
+        </div>
+
+        <div class="coluna">
+          <h2 class="secao-forte">Aparência</h2>
+          <div id="tema" class="segmentado" role="radiogroup" aria-label="Tema do app">
+            <button type="button" data-tema="sistema" role="radio" aria-checked="true">Sistema</button>
+            <button type="button" data-tema="claro" role="radio" aria-checked="false">Claro</button>
+            <button type="button" data-tema="escuro" role="radio" aria-checked="false">Escuro</button>
+          </div>
+          <p class="dica">Fica guardado só neste aparelho.</p>
+
+          <h2 class="secao-forte">Reportar problema</h2>
+          <form id="form-reclamacao" class="linha-form">
+            <input id="reclamacao-input" type="text" maxlength="500"
+                   placeholder="Descreva o problema" required aria-label="Descrição do problema">
+            <button class="botao-primario">Enviar</button>
+          </form>
+          <p class="dica">Sala errada, horário estranho, botão que não responde: manda que a
+            liga lê.</p>
+
+          <h2 class="secao-forte">Seus dados</h2>
+          <p class="dica">Exportar traz perfil, matérias, aparelhos com aviso e reclamações, em
+            JSON. Excluir apaga tudo isso na hora, sem volta.</p>
+          <div class="acoes-conta">
+            <button id="btn-export" class="botao-raso">Exportar meus dados</button>
+            <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
+          </div>
+          <p id="excluir-confirma" class="falha" role="alert" hidden>Isso apaga sua conta e tudo
+            que está nela, agora.
+            <button id="btn-excluir-confirma" class="mini perigo">Apagar mesmo</button>
+            <button id="btn-excluir-cancela" class="mini">Cancelar</button>
+          </p>
+
+          <h2 class="secao-forte">Ajuda</h2>
+          <p class="rodape-links">
+            <a class="saiba" href="privacidade.html">Política de Privacidade →</a>
+            <a class="saiba" href="termos.html">Termos de uso →</a>
+          </p>
+          <p class="dica" id="ajustes-versao"></p>
+        </div>
+      </div>
+
+      <div class="acoes-conta acoes-fim">
+        <button id="btn-sair" class="botao-raso">Sair da conta</button>
+      </div>
+    </section>
+
+    <!-- ADMIN -->
+    <section id="tela-admin" class="tela">
+      <button class="voltar" data-vai="conta">← Voltar</button>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Painel do admin</h1>
+
+      <div id="bloco-admin" hidden>
+        <h2 class="secao-forte">Site</h2>
+        <p id="admin-falha" class="falha" role="alert" hidden>O painel de admin não
+          respondeu.</p>
+        <button id="btn-trava" class="btn-menu" hidden>Travar o site</button>
+
+        <div class="colunas">
+          <div class="coluna">
+            <h2 class="secao">Reclamações</h2>
+            <ol id="admin-reclamacoes" class="board"></ol>
+            <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
+          </div>
+          <div class="coluna">
+            <h2 class="secao">Alunos</h2>
+            <ol id="admin-alunos" class="board"></ol>
+            <p id="admin-alunos-vazio" class="vazio" hidden>Nenhum aluno cadastrado.</p>
           </div>
         </div>
       </div>
