@@ -1,5 +1,7 @@
 """Testes do parser da captura. Rodar: python3 -m pytest capture/ -q"""
 
+import json
+
 import pytest
 
 from capture.captura import (anotar_canonicas, carregar_repertorio, parsear,
@@ -84,18 +86,53 @@ def test_pseudo_sala_nao_ocupa_nem_existe(rep):
     assert "ONLINE" not in rep["predio"]
 
 
-def test_concatenada_e_erro_do_sistema(rep):
-    # par não existe como sala; a linha não ocupa nada, nem a 302 nem a 303
-    assert resolver_sala("302/303", rep) == (None, "ignorada")
-    assert resolver_sala("304/035", rep) == (None, "ignorada")
-    # regra por barra cobre par novo sem cadastro
-    assert resolver_sala("305/306", rep) == (None, "ignorada")
+def test_pontuacao_nao_cria_sala_desconhecida(rep):
+    # a planilha trocou '103 - DESIGN THINKING' por '103 (DESIGN THINKING)' em
+    # 12/08; com chave sensível a pontuação isso caía na quarentena e a 103
+    # aparecia LIVRE com evento dentro, exatamente o defeito da 114
+    assert resolver_sala("103 (DESIGN THINKING)", rep) == ("103", "apelido")
+    # e a variante casa em qualquer pontuação, sem cadastrar apelido novo
+    for g in ("103 (DESIGN THINKING)", "103 - DESIGN THINKING",
+              "103 DESIGN THINKING", "103. DESIGN-THINKING"):
+        assert resolver_sala(g, rep)[0] == "103"
+    for g in ("107 (P2) - LAB.METROLOGIA", "107 P2 LAB METROLOGIA"):
+        assert resolver_sala(g, rep)[0] == "P2-107"
+
+
+def test_concatenada_com_dois_lados_validos_nao_ocupa_mas_e_logada(rep):
+    # par de salas de verdade: comportamento segue o de 06/08 (não ocupa nada),
+    # mas agora o caso é nomeado, pra decidir com volume medido
+    assert resolver_sala("302/303", rep) == (None, "barra-multipla")
+    assert resolver_sala("305/306", rep) == (None, "barra-multipla")
+    linhas = [{"sala": "302/303"}, {"sala": "2L1/2L2"}]
+    pendentes, multiplas = anotar_canonicas(linhas, rep)
+    assert pendentes == {}
+    assert multiplas == {"302/303": ["302", "303"], "2L1/2L2": ["2L1", "2L2"]}
+
+
+def test_barra_com_um_lado_valido_ocupa_esse_lado(rep):
+    # visto em 12/08: o lado esquerdo não existe no repertório e o direito é
+    # apelido cadastrado. Descartar o rótulo inteiro deixava a P2-206 livre com
+    # Arquitetura de Computadores dentro
+    assert resolver_sala("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)", rep) == \
+        ("P2-206", "apelido-barra")
+    # typo da origem em que só um lado é sala: ocupa o lado que existe
+    assert resolver_sala("304/035", rep) == ("304", "apelido-barra")
+    # e barra sem lado nenhum válido continua não ocupando
+    assert resolver_sala("XPTO/YWZ", rep) == (None, "ignorada")
 
 
 def test_rotulo_com_barra_ganha_da_regra(rep):
     # '/' separando rótulo, não par de salas: a barra não pode engolir a sala,
     # senão a 114 fica livre com aula de física dentro (visto em 10/08)
     assert resolver_sala("114 LAB QUIMICA/FISICA", rep) == ("114", "apelido")
+
+
+def test_espaco_de_evento_nao_e_sala(rep):
+    # auditório e foyer recebem evento, não são sala das 59, e ficavam poluindo
+    # a quarentena desde 10/08 sem nunca virar decisão
+    for g in ("AUDITÓRIO", "Auditorio", "FOYER"):
+        assert resolver_sala(g, rep) == (None, "ignorada")
 
 
 def test_desconhecida_cai_na_quarentena(rep):
@@ -106,8 +143,9 @@ def test_desconhecida_cai_na_quarentena(rep):
         {"sala": "CANCELADA"},
         {"sala": ""},
     ]
-    pendentes = anotar_canonicas(linhas, rep)
+    pendentes, multiplas = anotar_canonicas(linhas, rep)
     assert pendentes == {"SALA DO CAFE": 2}
+    assert multiplas == {}
     assert [l["sala_canon"] for l in linhas] == ["302", None, None, None, None]
 
 
@@ -116,3 +154,17 @@ def test_repertorio_integro(rep):
     assert all(c in rep["predio"] for c in rep["apelidos"].values())
     assert not set(rep["apelidos"]) & set(rep["salas"])
     assert len(rep["predio"]) == 59
+
+
+def test_repertorio_ambiguo_morre_no_load(tmp_path):
+    # com chave insensível a pontuação, dois rótulos podem colapsar na mesma
+    # chave; se apontarem pra salas diferentes é melhor a captura morrer do que
+    # servir sala errada em silêncio
+    ruim = tmp_path / "rep.json"
+    ruim.write_text(json.dumps({
+        "salas": {"101": "P1", "102": "P1"},
+        "apelidos": {"101 (LAB)": "101", "101 - LAB": "102"},
+        "ignoradas": [],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="ambíguo"):
+        carregar_repertorio(str(ruim))
