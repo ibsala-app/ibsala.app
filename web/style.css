@@ -210,6 +210,10 @@ main {
    isso que faz o card da esquerda alinhar com o board da direita no desktop */
 .secao + .painel-cabeca { margin-top: 0; }
 
+/* botão logo abaixo do card não pode encostar nele: encostado, o canto
+   arredondado do card ficava escondido atrás do botão */
+.painel-cabeca + .btn-menu { margin-top: 14px; }
+
 .painel-cabeca {
   background: var(--surface);
   border: 1px solid var(--border);

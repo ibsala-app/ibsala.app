@@ -161,6 +161,7 @@ window.addEventListener('popstate', (e) => mostrar(e.state?.tela ?? 'home', { pu
 let mapaHoje = []
 let salas = []
 let cfg = {}
+let totalAlunos = null
 let pronto = null
 
 // ── Faculdade agora ──────────────────────────────────────────────────────────
@@ -171,11 +172,12 @@ async function carregarAgora({ ghost = false } = {}) {
     ghostChips($('livres-grade'))
     ghostLinhas($('board-agora'))
   }
-  const [mapa, inv, conf] = await Promise.all([
+  const [mapa, inv, conf, quantos] = await Promise.all([
     sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala,sala_canon')
       .eq('data', hojeISO()),
     sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
     sb.from('config').select('key,value'),
+    sb.rpc('total_alunos'),
   ])
   if (mapa.error || inv.error) {
     $('agora-falha').hidden = false
@@ -189,6 +191,7 @@ async function carregarAgora({ ghost = false } = {}) {
   mapaHoje = mapa.data
   salas = inv.data
   if (!conf.error) cfg = Object.fromEntries((conf.data ?? []).map((r) => [r.key, r.value]))
+  if (!quantos.error && typeof quantos.data === 'number') totalAlunos = quantos.data
   aplicarTrava()
   pintarAgora()
 }
@@ -254,6 +257,12 @@ function pintarAgora() {
     <span class="sala">${esc(chipSala(r))}</span>
     <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}${esc(rotuloCru(r))}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
+
+  // quantos já usam: prova social pra quem chega pelo QR code sem conta
+  $('pill-alunos').hidden = !totalAlunos
+  if (totalAlunos) {
+    $('pill-alunos').textContent = `${totalAlunos} ${totalAlunos === 1 ? 'aluno' : 'alunos'}`
+  }
 
   // frescor à vista: número sem hora não diz se é de agora ou das 3 da manhã
   const cap = cfg.ultima_captura

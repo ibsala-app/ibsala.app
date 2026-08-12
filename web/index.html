@@ -2,11 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- SEM viewport-fit=cover de proposito: era ele, e nao a meta de status-bar,
+       que fazia o conteudo subir por baixo da barra de status do iPhone na PWA
+       instalada, com o relogio escrito em cima da marca. Sem ele o iOS reserva a
+       faixa e pinta ela com o theme-color. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IBSALA</title>
   <meta name="description" content="Consulta de salas e horários do Ibmec BH em tempo real.">
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#002555">
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161c2c">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7faff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f17">
   <meta name="apple-mobile-web-app-title" content="IBSALA">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -40,6 +44,7 @@
       <span id="pill-slot" class="pill">—</span>
       <span id="pill-troca" class="pill pill-ouro" hidden></span>
       <span id="pill-livres" class="pill">—</span>
+      <span id="pill-alunos" class="pill" hidden></span>
       <span id="pill-frescor" class="pill pill-fraco" hidden></span>
     </div>
   </header>
