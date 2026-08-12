@@ -168,5 +168,17 @@ Deno.serve(async (req) => {
     await new Promise((ok) => setTimeout(ok, 600)) // Resend free: 2 req/s
   }
 
-  return Response.json({ enviados, pendentes: pendentes.length, hold })
+  // o `hold` só existia no corpo de uma resposta que ninguém lê: a fila podia
+  // ficar parada dias com a key errada e o sintoma era "o email não chegou"
+  const presos = pendentes.filter((p: any) => p.tentativas >= 4).length
+  await rest('config?on_conflict=key', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify([{
+      key: 'ultimo_email_drain',
+      value: { em: new Date().toISOString(), enviados, pendentes: pendentes.length, hold, presos },
+    }]),
+  }).catch(() => {})
+
+  return Response.json({ enviados, pendentes: pendentes.length, hold, presos })
 })
