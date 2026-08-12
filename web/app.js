@@ -226,8 +226,8 @@ function pintarAgora() {
   }
   $('board-agora').replaceChildren(...rolando.map((r) => li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala">${esc(r.sala || '?')}</span>
-    <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
+    <span class="sala">${esc(chipSala(r))}</span>
+    <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}${esc(rotuloCru(r))}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
 
   // frescor à vista: número sem hora não diz se é de agora ou das 3 da manhã
@@ -304,11 +304,18 @@ async function buscar(termo) {
   $('busca-vazio').hidden = cards.length > 0
 }
 
+// O chip mostra a sala CANÔNICA quando o repertório resolveu, e o rótulo cru da
+// planilha desce pra meta. Rótulo cru pode ser gigante
+// ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") e, dentro de um chip, engolia a
+// linha inteira: a disciplina saía uma letra por linha no celular.
+const chipSala = (r) => r.sala_canon || r.sala || '—'
+const rotuloCru = (r) => (r.sala && r.sala_canon && r.sala !== r.sala_canon ? ` · ${r.sala}` : '')
+
 function cardAula(r) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala">${esc(r.sala || '—')}</span>
-    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}</span>`)
+    <span class="sala">${esc(chipSala(r))}</span>
+    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}${esc(rotuloCru(r))}</span>`)
   if (perfil && r.codigo) el.append(acoesAdicionar(r))
   return el
 }
@@ -629,8 +636,8 @@ async function carregarMinhas() {
   board.replaceChildren(...linhasHoje.map(({ m, aula }) => (aula
     ? li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala">${esc(aula.sala || '—')}</span>
-      <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}</span>`)
+      <span class="sala">${esc(chipSala(aula))}</span>
+      <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}${esc(rotuloCru(aula))}</span>`)
     : li(`
       <span class="disc">${esc(m.disciplina)}</span>
       <span class="sala sala-vazia">—</span>

@@ -280,7 +280,10 @@ main {
 
 .board li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* a coluna do chip é limitada a 38% da linha: com `auto` + nowrap, rótulo
+     longo da planilha ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") reivindicava
+     a linha inteira e a disciplina saía uma letra por linha no celular */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 38%);
   grid-template-areas:
     "disc  sala"
     "meta  sala"
@@ -300,7 +303,8 @@ main {
   background: var(--gold-soft);
   border-radius: var(--r-md);
   padding: 6px 12px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -710,7 +714,7 @@ body.bloqueado .rodape { display: none; }
 
   /* a largura extra vira informação lado a lado, não linha esticada */
   .board li {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 22%);
     grid-template-areas:
       "disc meta sala"
       "acoes acoes acoes";
