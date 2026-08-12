@@ -885,6 +885,14 @@ body.bloqueado .rodape { display: none; }
 
 /* ── desktop: antes daqui o único @media de layout era um ajuste de margem em
    640px, então tela de 1440px mostrava a mesma coluna de celular esticada ─── */
+/* No celular o cabeçalho rouba a primeira dobra: são cinco pills antes de
+   qualquer conteúdo. A contagem de livres já é o número herói da tela ao lado, e
+   a hora da captura é detalhe de auditoria, não decisão de aluno. Some nas duas
+   no celular e volta no tablet pra cima, onde sobra largura. */
+@media (max-width: 767px) {
+  #pill-livres, #pill-frescor { display: none; }
+}
+
 @media (min-width: 768px) {
   :root { --col: 720px; }
 
