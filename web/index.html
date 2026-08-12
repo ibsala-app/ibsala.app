@@ -12,14 +12,17 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://jbdmkbivmflauushiqca.supabase.co">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <!-- Inter self-hospedada: a CSP não tem 'unsafe-inline' em script-src, então o
        truque do media="print" + onload nunca disparava e o site rodava na fonte
        do sistema desde o começo -->
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
+       bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
+       a pagina pintava inteira e NENHUM botao respondia, porque os listeners de
+       clique nem chegavam a ser registrados. -->
+  <script defer src="vendor/supabase.min.js"></script>
 </head>
 <body>
   <header class="topo">
