@@ -17,11 +17,14 @@
 # navegador, então quem tinha aberto o app nas últimas 4 horas continuava com o
 # app.js velho. `no-cache` não desliga o cache, obriga a revalidar: o 304 é
 # barato e o conserto chega na hora.
-# Duas tentativas medidas em produção antes desta: caminho EXATO (`/app.js`)
-# pegou em `/`, `/index.html` e `/manifest.json` mas NÃO em js e css, e o padrão
-# de extensão (`/*.js`) não pegou em nada. O que o Pages honra é splat de
-# DIRETÓRIO, e o bloco `/*` acima já vale pra tudo, então o `no-cache` mora lá e
-# as três pastas abaixo sobrescrevem com imutável.
+# Três tentativas medidas em produção, e o veredito: o Pages NÃO deixa o
+# `_headers` sobrescrever Cache-Control de js e css na RAIZ. Caminho exato
+# (`/app.js`) pegou em `/`, `/index.html` e `/manifest.json` e não em js/css;
+# padrão de extensão (`/*.js`) não pegou em nada; o bloco `/*` também não. Com
+# `?bust=` a resposta vem MISS do origin e ainda assim volta `max-age=14400`,
+# então não é cache de borda. Dentro de PASTA ele obedece, e é por isso que as
+# três abaixo funcionam. Quem resolve o resto é o service worker, que busca
+# `/app.js`, `/style.css` e `/config.js` com `cache: 'reload'`.
 
 # versionado ou imutável na prática: vale um ano
 /fonts/*
