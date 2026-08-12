@@ -163,8 +163,17 @@ let salas = []
 let cfg = {}
 let totalAlunos = null
 let pronto = null
+let mapaCarregado = false
 
 // ── Faculdade agora ──────────────────────────────────────────────────────────
+// Rede de celular pendura requisição sem avisar, e sem teto de tempo a tela
+// ficava em fantasma pra sempre: foi assim que, em aula do Osmar às 10:59, a
+// busca respondeu "sem aula hoje" pra uma aula que estava acontecendo.
+const comTeto = (p, ms = 9000) => Promise.race([
+  p,
+  new Promise((_, falha) => setTimeout(() => falha(new Error('tempo esgotado')), ms)),
+])
+
 async function carregarAgora({ ghost = false } = {}) {
   if (!sb) return              // sem bundle não há o que buscar; o aviso já está na tela
   if (ghost) {
@@ -172,22 +181,22 @@ async function carregarAgora({ ghost = false } = {}) {
     ghostChips($('livres-grade'))
     ghostLinhas($('board-agora'))
   }
-  const [mapa, inv, conf, quantos] = await Promise.all([
-    sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala,sala_canon')
-      .eq('data', hojeISO()),
-    sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
-    sb.from('config').select('key,value'),
-    sb.rpc('total_alunos'),
-  ])
-  if (mapa.error || inv.error) {
-    $('agora-falha').hidden = false
-    $('livres-num').classList.remove('ghost-num')
-    $('livres-grade').replaceChildren()
-    $('board-agora').replaceChildren()
-    toast('Sem conexão com o servidor.')
+  let mapa, inv, conf, quantos
+  try {
+    [mapa, inv, conf, quantos] = await comTeto(Promise.all([
+      sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala,sala_canon')
+        .eq('data', hojeISO()),
+      sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
+      sb.from('config').select('key,value'),
+      sb.rpc('total_alunos'),
+    ]))
+  } catch {
+    falhaNoMapa()
     return
   }
+  if (mapa.error || inv.error) { falhaNoMapa(); return }
   $('agora-falha').hidden = true
+  mapaCarregado = true
   mapaHoje = mapa.data
   salas = inv.data
   if (!conf.error) cfg = Object.fromEntries((conf.data ?? []).map((r) => [r.key, r.value]))
@@ -275,7 +284,20 @@ function pintarAgora() {
   }
 }
 
+function falhaNoMapa() {
+  mapaCarregado = false
+  $('agora-falha').hidden = false
+  $('livres-num').classList.remove('ghost-num')
+  $('livres-num').textContent = '–'
+  $('livres-grade').replaceChildren()
+  $('board-agora').replaceChildren()
+  toast('Não deu pra carregar o mapa de hoje.')
+}
+
 $('btn-retry').addEventListener('click', () => { pronto = carregarAgora({ ghost: true }) })
+// handler em JS, nunca onclick inline: a CSP não tem 'unsafe-inline' em
+// script-src e handler inline morre calado (foi assim que a Inter não carregava)
+$('btn-recarregar').addEventListener('click', () => location.reload())
 
 // ── Trava do site (o botão do admin agora vale de verdade) ───────────────────
 function aplicarTrava() {
@@ -336,6 +358,9 @@ async function buscar(termo) {
   ]
   lista.replaceChildren(...cards)
   $('busca-vazio').hidden = cards.length > 0
+  // sem mapa carregado a busca NÃO afirma nada sobre hoje: dizer "sem aula hoje"
+  // pra aula que está acontecendo é pior que dizer "não sei"
+  $('busca-sem-mapa').hidden = mapaCarregado || cards.length === 0
 }
 
 // O chip mostra a sala CANÔNICA quando o repertório resolveu, e o rótulo cru da
@@ -357,10 +382,11 @@ function cardAula(r) {
 }
 
 function cardCatalogo(r) {
+  const situacao = mapaCarregado ? 'sem aula hoje' : 'mapa de hoje indisponível'
   const el = li(`
     <span class="disc">${esc(r.disciplina)}</span>
     <span class="sala sala-vazia">—</span>
-    <span class="meta">sem aula hoje · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
+    <span class="meta">${situacao} · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
   if (perfil) el.append(acoesAdicionar(r))
   return el
 }
