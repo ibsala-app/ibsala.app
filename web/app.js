@@ -343,7 +343,9 @@ async function buscar(termo) {
 // ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") e, dentro de um chip, engolia a
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
-const rotuloCru = (r) => (r.sala && r.sala_canon && r.sala !== r.sala_canon ? ` · ${r.sala}` : '')
+// o rótulo cru da planilha ("202 (P2) LAB.REDES") não vai mais pra tela: o chip
+// já mostra a canônica, que é o número que está na porta
+const rotuloCru = () => ''
 
 function cardAula(r) {
   const el = li(`
@@ -366,15 +368,24 @@ function cardCatalogo(r) {
 function acoesAdicionar(r, { dia } = {}) {
   const acoes = document.createElement('span')
   acoes.className = 'acoes'
+  const btn = document.createElement('button')
+  btn.className = 'mini'
+
+  if (dia) {
+    // linha do mapa de hoje: o app JÁ sabe o dia, então não pergunta. O seletor
+    // aqui era decoração que dava chance de errar
+    btn.textContent = `Adicionar na ${DIAS[dia]}`
+    btn.addEventListener('click', () => adicionarMateria(r, dia))
+    acoes.append(btn)
+    return acoes
+  }
+
+  // catálogo: a disciplina não tem aula hoje, então o dia é a única coisa que o
+  // app não tem como saber (o mapa guarda só o dia corrente)
   const sel = document.createElement('select')
   sel.className = 'mini'
   sel.setAttribute('aria-label', 'Dia da semana')
   sel.innerHTML = DIAS.map((d, i) => (i ? `<option value="${i}">${d}</option>` : '')).join('')
-  // aula que acontece HOJE já vem com hoje escolhido: o padrão cego em SEG
-  // fazia o aluno cadastrar a matéria no dia errado e nunca receber o aviso
-  if (dia) sel.value = String(dia)
-  const btn = document.createElement('button')
-  btn.className = 'mini'
   btn.textContent = 'Adicionar'
   btn.addEventListener('click', () => adicionarMateria(r, +sel.value))
   acoes.append(sel, btn)
@@ -441,58 +452,77 @@ async function subAtual() {
   return reg.pushManager.getSubscription()
 }
 
+// o switch mostra ESTADO. O botão anterior descrevia a próxima ação
+// ("Desativar avisos"), e pra saber se estava ligado o aluno tinha que ler.
 async function atualizarBotaoPush() {
-  const btn = $('btn-push')
+  const chk = $('chk-push')
+  const rotulo = $('push-rotulo')
   const dica = $('push-dica')
+
   if (!('PushManager' in window)) {
-    btn.disabled = true
-    btn.textContent = 'Avisos não suportados neste navegador'
+    chk.disabled = true
+    chk.checked = false
+    rotulo.textContent = 'Avisos não suportados neste navegador'
     return
   }
   // no iPhone o subscribe só funciona com o app na Tela de Início, e sem dizer
   // isso o aluno toca, falha e não entende
   if (ehIOS && !naTelaDeInicio()) {
-    btn.disabled = true
-    btn.textContent = 'Avisos exigem o app na Tela de Início'
+    chk.disabled = true
+    chk.checked = false
+    rotulo.textContent = 'Avisos exigem o app na Tela de Início'
     dica.textContent = 'No iPhone: botão Compartilhar do Safari → "Adicionar à Tela de Início". ' +
-      'Abra o IBSALA por esse ícone e o botão de avisos destrava.'
+      'Abra o IBSALA por esse ícone e o interruptor destrava.'
     return
   }
-  btn.disabled = false
-  const sub = await subAtual()
-  btn.textContent = sub ? 'Desativar avisos neste aparelho' : 'Ativar avisos neste aparelho'
+  chk.disabled = false
+  rotulo.textContent = 'Avisos neste aparelho'
+  chk.checked = !!(await subAtual())
 }
 
-$('btn-push').addEventListener('click', async () => {
+$('chk-push').addEventListener('change', async (e) => {
+  const chk = e.target
+  const querLigar = chk.checked
+
   // requestPermission ANTES de qualquer await: o Safari só aceita o pedido
   // dentro da tarefa do gesto, e esperar o serviceWorker.ready quebrava isso
-  const pedido = Notification.permission === 'default'
+  const pedido = querLigar && Notification.permission === 'default'
     ? Notification.requestPermission()
     : Promise.resolve(Notification.permission)
 
-  const sub = await subAtual()
-  if (sub) {
-    await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
-    await sub.unsubscribe()
-    toast('Avisos desativados.')
+  chk.disabled = true
+  try {
+    const sub = await subAtual()
+
+    if (!querLigar) {
+      if (sub) {
+        await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+        await sub.unsubscribe()
+      }
+      toast('Avisos desativados.')
+      return
+    }
+
+    if (sub) return                     // já estava inscrito, nada a fazer
+    const perm = await pedido
+    if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
+    const reg = await navigator.serviceWorker.ready
+    const nova = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
+    })
+    const j = nova.toJSON()
+    const { error } = await sb.from('push_subscriptions').insert({
+      aluno_id: sessao.user.id, endpoint: j.endpoint,
+      p256dh: j.keys.p256dh, auth: j.keys.auth,
+    })
+    if (error) { toast('Não deu pra registrar o aviso.'); await nova.unsubscribe(); return }
+    toast('Avisos ativados neste aparelho.')
+  } finally {
+    chk.disabled = false
+    // o switch nunca fica mentindo: o estado final vem do que existe de fato
     atualizarBotaoPush()
-    return
   }
-  const perm = await pedido
-  if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
-  const reg = await navigator.serviceWorker.ready
-  const nova = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
-  })
-  const j = nova.toJSON()
-  const { error } = await sb.from('push_subscriptions').insert({
-    aluno_id: sessao.user.id, endpoint: j.endpoint,
-    p256dh: j.keys.p256dh, auth: j.keys.auth,
-  })
-  if (error) { toast('Não deu pra registrar o aviso.'); await nova.unsubscribe(); return }
-  toast('Avisos ativados neste aparelho.')
-  atualizarBotaoPush()
 })
 
 // ── Reclamações / dados (LGPD) ───────────────────────────────────────────────

@@ -212,7 +212,7 @@ main {
 
 /* botão logo abaixo do card não pode encostar nele: encostado, o canto
    arredondado do card ficava escondido atrás do botão */
-.painel-cabeca + .btn-menu { margin-top: 14px; }
+.painel-cabeca + .btn-menu { margin-top: 18px; }
 
 .painel-cabeca {
   background: var(--surface);
@@ -346,6 +346,7 @@ main {
 }
 
 .vazio { color: var(--text-muted); padding: 12px 4px; }
+.linha-form + .vazio { padding-top: 10px; }
 
 .falha {
   display: flex;
@@ -361,6 +362,9 @@ main {
 }
 
 .busca-wrap { display: block; padding-top: 16px; }
+
+/* a lista de resultados não pode encostar no campo de busca */
+#busca-lista { margin-top: 14px; }
 
 .rotulo-campo {
   display: block;
@@ -391,7 +395,7 @@ input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible
   outline-offset: 2px;
 }
 
-.linha-form { display: flex; gap: 8px; padding-top: 10px; }
+.linha-form { display: flex; gap: 8px; padding-top: 14px; }
 
 /* ── botões ────────────────────────────────────────────────────────────────── */
 /* Antes daqui não havia UMA regra :hover ou :active no arquivo: no PC o clique
@@ -685,6 +689,63 @@ body.bloqueado .rodape { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #toast { transition: none; }
+}
+
+/* interruptor de avisos: estado visivel, em vez de um botao que descreve a
+   proxima acao ("Desativar avisos") e obriga a ler pra saber se esta ligado */
+.linha-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 18px;
+  min-height: 56px;
+  cursor: pointer;
+}
+
+.linha-switch-texto { font-weight: 700; font-size: 15.5px; }
+
+.linha-switch:has(.switch:disabled) { cursor: not-allowed; }
+.linha-switch:has(.switch:disabled) .linha-switch-texto { color: var(--text-muted); }
+
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 52px;
+  height: 30px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  cursor: inherit;
+  transition: background-color .16s, border-color .16s;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+  transition: transform .16s;
+}
+
+.switch:checked { background: var(--gold); border-color: var(--gold-dim); }
+.switch:checked::after { transform: translateX(22px); }
+.switch:disabled { opacity: .55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch::after { transition: none; }
 }
 
 .acoes-conta { display: flex; flex-wrap: wrap; gap: 10px; }
