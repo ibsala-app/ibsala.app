@@ -149,18 +149,22 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 // componentes fantasma: o que aparece enquanto o dado não chegou, no lugar de
 // "–" e lista vazia (que se confundem com "não tem nada hoje")
 function ghostLinhas(el, n = 3) {
+  el.setAttribute('aria-busy', 'true')
   el.replaceChildren(...Array.from({ length: n }, () => {
     const l = document.createElement('li')
     l.className = 'ghost-li'
+    l.setAttribute('aria-hidden', 'true')
     l.innerHTML = '<span class="ghost g-disc"></span><span class="ghost g-sala"></span>' +
       '<span class="ghost g-meta"></span>'
     return l
   }))
 }
 function ghostChips(el, n = 12) {
+  el.setAttribute('aria-busy', 'true')
   el.replaceChildren(...Array.from({ length: n }, () => {
     const c = document.createElement('span')
     c.className = 'ghost g-chip'
+    c.setAttribute('aria-hidden', 'true')
     return c
   }))
 }
@@ -359,6 +363,7 @@ function pintarAgora() {
 
   // chips agrupados por prédio, e todos: cortar em 40 sem avisar escondia sala
   const grade = $('livres-grade')
+  $('livres-vazio').hidden = !slot || livres.length > 0
   const predios = [...new Set(livres.map((s) => s.predio))].sort()
   grade.replaceChildren(...predios.flatMap((p) => {
     const rot = document.createElement('span')
@@ -372,6 +377,9 @@ function pintarAgora() {
     })
     return [rot, ...chips]
   }))
+
+  grade.removeAttribute('aria-busy')
+  $('board-agora').removeAttribute('aria-busy')
 
   const rolando = []
   const vistos = new Set()
@@ -445,9 +453,14 @@ $('btn-recarregar').addEventListener('click', () => location.reload())
 // ── Trava do site (o botão do admin agora vale de verdade) ───────────────────
 function aplicarTrava() {
   const bloqueado = cfg.travado === true && perfil?.role !== 'admin'
+  const mudou = $('bloqueio').hidden === bloqueado
   $('bloqueio').hidden = !bloqueado
   document.body.classList.toggle('bloqueado', bloqueado)
-  if (bloqueado) window.scrollTo(0, 0)
+  if (bloqueado && mudou) {
+    window.scrollTo(0, 0)
+    // o main some inteiro: sem isto o foco fica num botão que virou display:none
+    $('bloqueio').querySelector('.bloqueio-card')?.focus({ preventScroll: true })
+  }
 }
 
 // ── Planilha dinâmica ────────────────────────────────────────────────────────
@@ -535,7 +548,11 @@ async function buscar(termo) {
     ...linhasHoje.map((r) => cardAula(r)),
     ...semAulaHoje.map((r) => cardCatalogo(r)),
   ]
+  lista.removeAttribute('aria-busy')
   lista.replaceChildren(...cards)
+  $('busca-status').textContent = cards.length
+    ? `${cards.length} ${cards.length === 1 ? 'resultado' : 'resultados'}`
+    : 'nada encontrado'
   $('busca-vazio').hidden = cards.length > 0
   // sem mapa carregado a busca NÃO afirma nada sobre hoje: dizer "sem aula hoje"
   // pra aula que está acontecendo é pior que dizer "não sei"
@@ -637,7 +654,10 @@ function mostrarConta() {
   // logado, os dois botões de conta colapsam num só
   $('btn-menu-entrar').textContent = logado ? `Minhas aulas (${perfil.username})` : 'Entrar'
   $('btn-menu-criar').hidden = logado
-  if (cadastrando) mostrar('conta')      // volta do OAuth cai no passo pendente
+  if (cadastrando) {
+    mostrar('conta')                     // volta do OAuth cai no passo pendente
+    $('username-input').focus({ preventScroll: true })
+  }
 }
 
 // A tela guardava a lista de matérias e, no admin, o email de todos os alunos.
@@ -1096,6 +1116,8 @@ async function carregarMinhas() {
   $('materias-falha').hidden = true
   minhas = data ?? []
 
+  $('lista-materias').removeAttribute('aria-busy')
+  $('board-hoje').removeAttribute('aria-busy')
   $('lista-materias').replaceChildren(...minhas.map((m) => {
     const el = li(`
       <span class="disc">${esc(m.disciplina)}</span>

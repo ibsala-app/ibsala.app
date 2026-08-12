@@ -59,6 +59,17 @@
   --press: #e6ecf8;
   --shadow-sm: 0 1px 2px rgba(0,37,85,.05);
   --shadow-md: 0 4px 16px rgba(0,37,85,.08), 0 1px 3px rgba(0,37,85,.05);
+  /* escala de espaçamento: antes eram 20 valores soltos (2, 3, 4, 5, 6, 7, 8,
+     10, 11, 12, 14, 15, 16, 18, 20, 22, 24, 26, 28 e 30px), sem grade nenhuma */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --pad-card: 16px 18px;
+  --pad-linha: 12px 16px;
+
   --r-sm: 8px;
   --r-md: 10px;
   --r-lg: 14px;
@@ -75,7 +86,6 @@
   --t-hero: 56px;
 
   --col: 640px;               /* largura da coluna de conteúdo, por breakpoint */
-  --gap-col: 0px;
 }
 
 /* Paleta escura em DOIS lugares de propósito, e não é descuido: uma para quem
@@ -171,7 +181,7 @@ body {
 button, input, select, a {
   /* mata o atraso de 300ms do toque e o realce cinza padrão do mobile */
   touch-action: manipulation;
-  -webkit-tap-highlight-color: rgba(245,172,0,.22);
+  -webkit-tap-highlight-color: rgb(245 172 0 / .22);
 }
 
 main {
@@ -192,7 +202,7 @@ main {
   background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 14px 18px;
+  padding: var(--pad-card);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -218,7 +228,7 @@ main {
 
 .marca-sub { display: block; font-size: var(--t-xs); color: var(--text-muted); }
 
-.marca img { border-radius: 7px; box-shadow: 0 2px 8px rgba(0,37,85,.18); }
+.marca img { border-radius: var(--r-sm); box-shadow: var(--shadow-sm); }
 
 @media (max-width: 640px) {
   .topo { margin: calc(14px + env(safe-area-inset-top)) 18px 0; }
@@ -248,7 +258,7 @@ main {
 /* o título recebe foco por programa quando a tela troca, pra o leitor de tela
    acompanhar; anel não entra porque título não é controle operável, e o anel
    aparecia como uma caixa dourada em volta do h1 a cada navegação */
-[data-cabeca]:focus, [data-cabeca]:focus-visible { outline: none; }
+[data-cabeca]:focus, [data-cabeca]:focus-visible { outline: none; box-shadow: none; }
 
 .painel-titulo { font-size: var(--t-xl); font-weight: 800; }
 
@@ -265,8 +275,8 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
-  padding: 20px 20px 16px;
+  box-shadow: var(--shadow-sm);
+  padding: var(--s-5) var(--s-5) var(--s-4);
   margin-top: 16px;
 }
 
@@ -279,7 +289,7 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-.hero-rotulo { color: var(--text-dim); margin-top: 2px; }
+.hero-rotulo { color: var(--text-dim); margin-top: 6px; }
 
 .grade-salas {
   display: flex;
@@ -344,18 +354,23 @@ main {
 
 .board:empty { display: none; }
 
+/* o comentário de `.painel-cabeca + .btn-menu` documenta o mesmo defeito; a
+   variante que sobrou era o botão dourado encostando no canto arredondado da
+   LISTA de matérias */
+.board + .btn-menu, .vazio + .btn-menu, .falha + .btn-menu { margin-top: 18px; }
+
 .board li {
   display: grid;
   /* a coluna do chip é limitada a 38% da linha: com `auto` + nowrap, rótulo
      longo da planilha ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") reivindicava
      a linha inteira e a disciplina saía uma letra por linha no celular */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 38%);
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
   grid-template-areas:
     "disc  sala"
     "meta  sala"
     "acoes acoes";
   gap: 2px 12px;
-  padding: 12px 16px;
+  padding: var(--pad-linha);
 }
 
 .board li + li { border-top: 1px solid var(--border-soft); }
@@ -439,7 +454,7 @@ main {
   align-items: center;
   gap: 10px;
   margin-top: 14px;
-  padding: 12px 14px;
+  padding: var(--pad-linha);
   color: var(--text);
   background: var(--aviso-soft);
   border: 1px solid var(--aviso-borda);
@@ -476,12 +491,22 @@ input[type="search"], input[type="text"] {
 
 input[type="search"]:focus, input[type="text"]:focus { border-color: var(--blue-2); }
 
-input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible {
-  outline: 2px solid var(--gold);
+/* Era ouro: 1,00:1 sobre o botão dourado (a MESMA cor, foco invisível) e 1,86:1
+   sobre o fundo claro. Azul funciona sobre superfície, sobre bg2 e sobre o ouro,
+   e o halo da cor do fundo separa o anel de qualquer coisa atrás dele. */
+input:focus-visible, button:focus-visible, select:focus-visible,
+a:focus-visible, [tabindex]:focus-visible:not([data-cabeca]) {
+  outline: 3px solid var(--blue-2);
   outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--bg);
+  border-radius: var(--r-sm);
 }
 
-.linha-form { display: flex; gap: 8px; padding-top: 14px; }
+/* `min-width: auto` do item flex trava o input no tamanho intrínseco (~210px a
+   16px de fonte), e a linha inteira transbordava em 320px: iPhone SE, e qualquer
+   iPhone com Zoom de Tela ligado */
+.linha-form { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
+.linha-form input { flex: 1 1 12ch; min-width: 0; }
 
 /* ── botões ────────────────────────────────────────────────────────────────── */
 /* Antes daqui não havia UMA regra :hover ou :active no arquivo: no PC o clique
@@ -524,7 +549,7 @@ input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible
   color: var(--text);
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   cursor: pointer;
   transition: background-color .14s, transform .08s, border-color .14s;
 }
@@ -554,12 +579,15 @@ select.mini { padding-right: 8px; }
   border-color: transparent;
 }
 
+/* dentro da grade 2x2 o stretch esticava este botão à altura do vizinho e ele
+   virava uma CAIXA VAZIA com borda ao lado de três cards sólidos */
 .btn-menu.menor {
   font-size: var(--t-sm2);
   font-weight: 600;
   padding: 11px 18px;
   color: var(--text-dim);
   background: transparent;
+  border-color: transparent;
   box-shadow: none;
 }
 
@@ -570,7 +598,8 @@ select.mini { padding-right: 8px; }
   color: var(--blue-2);
   background: none;
   border: 0;
-  padding: 0;
+  padding: 10px 0;
+  min-height: 44px;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -596,7 +625,6 @@ button:disabled {
   .mini:hover:not(:disabled) { background: var(--hover); border-color: var(--blue-2); }
   .voltar:hover { color: var(--blue-2); }
   .saiba:hover, .link-botao:hover { color: var(--blue); }
-  .sala-chip:hover { border-color: var(--blue-2); }
 }
 
 /* pressão vale pro mouse E pro toque */
@@ -615,10 +643,9 @@ button:disabled {
 .voltar:active { transform: translateY(1px); }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn-menu, .botao-primario, .botao-raso, .mini { transition: none; }
-  .btn-menu:active, .botao-primario:active, .botao-raso:active, .mini:active {
-    transform: none;
-  }
+  .btn-menu, .botao-primario, .botao-raso, .mini, .voltar { transition: none; }
+  .btn-menu:active, .botao-primario:active, .botao-raso:active, .mini:active,
+  .voltar:active { transform: none; }
 }
 
 /* home do v1: menu de botões grandes */
@@ -636,8 +663,10 @@ button:disabled {
 .tagline { color: var(--text-dim); padding-top: 6px; }
 
 .saiba {
-  display: inline-block;
-  margin-top: 26px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 20px;
   color: var(--blue-2);
   font-size: var(--t-sm2);
   text-decoration: underline;
@@ -654,7 +683,7 @@ button:disabled {
 
 .cta-suave {
   margin-top: 22px;
-  padding: 14px 16px;
+  padding: var(--pad-linha);
   color: var(--text-dim);
   font-size: var(--t-sm2);
   background: var(--bg2);
@@ -703,7 +732,7 @@ button:disabled {
 /* ── componentes fantasma (carregando) ─────────────────────────────────────── */
 .ghost {
   display: block;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: linear-gradient(90deg, var(--bg2) 0%, var(--bg3) 50%, var(--bg2) 100%);
   background-size: 200% 100%;
   animation: ghost-desliza 1.3s linear infinite;
@@ -718,7 +747,7 @@ button:disabled {
 
 .hero-num.ghost-num {
   color: transparent;
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: linear-gradient(90deg, var(--bg2) 0%, var(--bg3) 50%, var(--bg2) 100%);
   background-size: 200% 100%;
   animation: ghost-desliza 1.3s linear infinite;
@@ -747,7 +776,7 @@ body.bloqueado .rodape { display: none; }
   border-left: 4px solid var(--gold);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
-  padding: 22px;
+  padding: var(--s-5);
 }
 
 .bloqueio-card h2 { font-size: var(--t-xl); font-weight: 800; padding-bottom: 6px; }
@@ -798,7 +827,7 @@ body.bloqueado .rodape { display: none; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  padding: 14px 18px;
+  padding: var(--pad-card);
   min-height: 56px;
   cursor: pointer;
 }
@@ -867,16 +896,23 @@ body.bloqueado .rodape { display: none; }
   }
 
   .home-titulo { font-size: 32px; }
+  .tela-titulo { font-size: 30px; }
   .hero-num { font-size: 64px; }
+
+  /* de 768 a 1099 a faixa herdava --col do desktop e NENHUMA das correções de
+     layout dele: o chip de sala chegava a 248px no iPad em retrato */
+  .colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px;
+    align-items: start; }
+  .busca-wrap { max-width: 560px; }
 }
 
 @media (min-width: 1100px) {
-  :root { --col: 1080px; --gap-col: 26px; }
+  :root { --col: 1080px; }
 
   .colunas {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--gap-col);
+    gap: var(--s-5);
     align-items: start;
   }
 
@@ -887,7 +923,7 @@ body.bloqueado .rodape { display: none; }
 
   /* a largura extra vira informação lado a lado, não linha esticada */
   .board li {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 22%);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, max-content);
     grid-template-areas:
       "disc meta sala"
       "acoes acoes acoes";
@@ -895,14 +931,17 @@ body.bloqueado .rodape { display: none; }
     gap: 4px 16px;
   }
 
-  .board .meta { font-size: var(--t-sm); }
   .ghost-li .g-meta { width: 92%; margin-top: 0; }
 
   .home-titulo { font-size: 38px; max-width: 26ch; text-wrap: balance; }
+  .tela-titulo { font-size: 32px; }
   .tagline { max-width: 60ch; text-wrap: pretty; }
-  .menu { grid-template-columns: 1fr 1fr; max-width: 720px; }
-  /* campo de busca de 1080px de largura é desconfortável de ler */
-  .busca-wrap { max-width: 560px; }
+  .menu { max-width: 720px; }
+  /* campo de busca de 1080px de largura é desconfortável de ler. A LISTA
+     acompanha: com 560 no campo e 1044 na lista, a borda do campo caía no meio
+     dos resultados */
+  .busca-wrap, #busca-lista, #busca-dica, #busca-vazio,
+  #busca-falha, #busca-sem-mapa, #cta-conta { max-width: 720px; }
 }
 
 /* mouse tem mira melhor que dedo: linha mais compacta e herói menos dramático.
@@ -910,7 +949,6 @@ body.bloqueado .rodape { display: none; }
    `pointer: fine` pelo mouse e continua sendo tocado com o dedo. */
 @media (pointer: fine) and (min-width: 1100px) {
   .board li { padding: 10px 16px; }
-  .hero-num { font-size: 52px; }
 }
 
 
@@ -1026,3 +1064,29 @@ body.bloqueado .rodape { display: none; }
   padding-top: 18px;
   border-top: 1px solid var(--border-soft);
 }
+
+/* ── Acessibilidade ──────────────────────────────────────────────────────── */
+
+/* texto que só o leitor de tela lê: o resultado da busca trocava sem nenhum
+   anúncio, então quem navega por áudio digitava e não ouvia nada acontecer */
+.so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+
+/* ── Páginas de texto (privacidade, termos) ──────────────────────────────── */
+/* A política inteira usava `.tagline`, que é o subtítulo da home em --text-dim:
+   corpo de página legal em cor de texto secundário. */
+main > p {
+  padding: 4px 4px 12px;
+  max-width: 68ch;
+  line-height: 1.65;
+}
+main > .fim-pagina { padding-top: var(--s-5); }

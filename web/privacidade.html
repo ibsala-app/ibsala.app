@@ -4,43 +4,61 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Privacidade · IBSALA</title>
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#002555">
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161c2c">
+  <meta name="description" content="Como o IBSALA trata dado pessoal: o que coleta, por quê, por quanto tempo e como apagar.">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7faff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f17">
+  <meta name="apple-mobile-web-app-title" content="IBSALA">
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header class="topo">
+    <div class="topo-linha">
+      <div class="marca">
+        <img src="icons/icon-192.png" alt="" width="30" height="30" decoding="async">
+        <div>
+          <span class="marca-nome">IBSALA</span>
+          <span class="marca-sub">IBtech · salas em tempo real</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <main>
-    <p class="eyebrow">IBSALA · LGPD</p>
-    <h1 style="padding-top:6px">Privacidade</h1>
+    <a class="voltar" href="/">← Voltar pro IBSALA</a>
+    <p class="eyebrow">IBtech · LGPD</p>
+    <h1 class="tela-titulo">Privacidade</h1>
 
-    <h2 class="secao">O que é o IBSALA</h2>
-    <p class="tagline">Projeto estudantil da liga IBtech (Ibmec BH) que mostra, em tempo
-      real, em qual sala cada aula acontece e quais salas estão livres. Mantido por
-      Joshua Azze. Contato: ibsala.app@gmail.com.</p>
+    <h2 class="secao-forte">O que é o IBSALA</h2>
+    <p>Projeto estudantil da liga IBtech (Ibmec BH) que mostra, em tempo real, em qual sala cada
+      aula acontece e quais salas estão livres. Mantido por Joshua Azze.
+      Contato: ibsala.app@gmail.com.</p>
 
-    <h2 class="secao">Dados coletados</h2>
-    <p class="tagline">Ao entrar com Google: seu email e o username que você escolher.
-      Ao montar sua grade: as matérias que você adicionar. Ao ativar avisos: o endereço
-      técnico de notificação do seu aparelho. Nada além disso: sem senha própria, sem
-      telefone, sem localização.</p>
+    <h2 class="secao-forte">Dados coletados</h2>
+    <p>Ao entrar com Google: seu email e o username que você escolher. Ao montar sua grade: as
+      matérias que você adicionar. Ao ativar avisos: o endereço técnico de notificação do seu
+      aparelho. Nada além disso: sem senha própria, sem telefone, sem localização.</p>
 
-    <h2 class="secao">Uso e base legal</h2>
-    <p class="tagline">Os dados servem só pra mostrar suas aulas e enviar os avisos de
-      sala que você ativar (execução de serviço solicitado, art. 7º V da LGPD). Não há
-      venda, compartilhamento ou anúncio.</p>
+    <h2 class="secao-forte">Uso e base legal</h2>
+    <p>Os dados servem só pra mostrar suas aulas e enviar os avisos de sala que você ativar
+      (execução de serviço solicitado, art. 7º V da LGPD). Não há venda, compartilhamento ou
+      anúncio.</p>
 
-    <h2 class="secao">Retenção e exclusão</h2>
-    <p class="tagline">Conta sem acesso há 12 meses é apagada automaticamente.
-      Reclamações resolvidas são apagadas após 6 meses. Você pode exportar seus dados
-      (JSON) ou excluir a conta inteira, na hora, dentro do app em Conta → Seus dados.</p>
+    <h2 class="secao-forte">Retenção e exclusão</h2>
+    <p>Conta sem acesso há 12 meses é apagada automaticamente. Reclamação resolvida sai depois de
+      6 meses, e a fila de email enviada é limpa em 30 dias. Você pode exportar seus dados (JSON)
+      ou excluir a conta inteira, na hora, dentro do app em Ajustes → Seus dados.</p>
 
-    <h2 class="secao">Infraestrutura</h2>
-    <p class="tagline">Dados no Supabase (Postgres, São Paulo) cifrados em repouso;
-      tráfego 100% HTTPS; acesso protegido por Row Level Security: cada aluno só
-      enxerga o próprio dado.</p>
+    <h2 class="secao-forte">Infraestrutura</h2>
+    <p>Dados no Supabase (Postgres, São Paulo) cifrados em repouso; tráfego 100% HTTPS; acesso
+      protegido por Row Level Security: cada aluno só enxerga o próprio dado.</p>
 
-    <p style="padding-top:24px"><a class="saiba" href="/">← Voltar pro IBSALA</a></p>
+    <p class="rodape-links fim-pagina">
+      <a class="saiba" href="termos.html">Termos de uso →</a>
+      <a class="saiba" href="/">← Voltar pro IBSALA</a>
+    </p>
   </main>
   <footer class="rodape">
     <p>© 2026 Joshua Azze &amp; IBtech · Todos os direitos reservados.</p>
