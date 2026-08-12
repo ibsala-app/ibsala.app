@@ -12,9 +12,26 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
 // primeiro plano e recarrega UMA vez quando o worker novo toma o controle.
 const tinhaControlador = !!navigator.serviceWorker?.controller
 let recarregandoPraAtualizar = false
+// digitando não se recarrega: `procurarAtualizacao` roda a cada volta ao
+// primeiro plano, e um deploy no meio do cadastro apagava o username que o
+// aluno estava escrevendo
+const estaEscrevendo = () => {
+  const el = document.activeElement
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !!el.value
+}
 navigator.serviceWorker?.addEventListener('controllerchange', () => {
   // primeira instalação também dispara controllerchange, e aí recarregar é ruído
   if (!tinhaControlador || recarregandoPraAtualizar) return
+  if (estaEscrevendo()) {
+    // recarrega quando ele sair do campo, não por cima do que ele digitou
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && !recarregandoPraAtualizar) {
+        recarregandoPraAtualizar = true
+        location.reload()
+      }
+    }, { once: true })
+    return
+  }
   recarregandoPraAtualizar = true
   location.reload()
 })
@@ -48,7 +65,10 @@ const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA',
 const TELAS = ['home', 'agora', 'buscar', 'conta']
 
 function agoraBRT() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+  // o parse de "8/12/2026, 3:04:05 PM" depende do motor; se falhar, o relógio
+  // local é melhor que Invalid Date virando NaN no cabeçalho inteiro
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+  return isNaN(d) ? new Date() : d
 }
 function hojeISO() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
@@ -70,12 +90,6 @@ function faixaHoraria(h) {
   if (!hs.length) return null
   return [hs[0], hs.length > 1 ? hs[hs.length - 1] : hs[0]]
 }
-function horarioParaSlot(h) {
-  const f = faixaHoraria(h)
-  if (!f) return null
-  for (const [k, s] of Object.entries(SLOTS)) if (f[0] >= s.ini && f[0] <= s.fim) return k
-  return null
-}
 function intervaloContem(horario, min) {
   const f = faixaHoraria(horario)
   return !!f && min >= f[0] && min <= f[1]
@@ -86,9 +100,6 @@ function intervaloContem(horario, min) {
 function intervaloCobreSlot(horario, s) {
   const f = faixaHoraria(horario)
   return !!f && f[0] <= s.fim && f[1] >= s.ini
-}
-function hhmm(min) {
-  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 }
 function proximoSlot(min) {
   for (const [k, s] of Object.entries(SLOTS)) if (s.ini > min) return { k, ...s }
@@ -151,28 +162,88 @@ function mostrar(tela, { push = true } = {}) {
 document.querySelectorAll('[data-vai]').forEach((b) => {
   b.addEventListener('click', () => {
     if (b.dataset.intencao) aplicarIntencao(b.dataset.intencao)
+    // o botão Voltar empilhava entrada nova: o histórico virava [#, #agora, #]
+    // e o gesto de voltar do iPhone levava DE VOLTA pra tela de onde ele saiu
+    if (b.classList.contains('voltar') && history.length > 1 && telaAtual !== 'home') {
+      history.back()
+      return
+    }
     mostrar(b.dataset.vai)
   })
 })
 
-window.addEventListener('popstate', (e) => mostrar(e.state?.tela ?? 'home', { push: false }))
+// sem o fallback pro hash, o atalho do manifest ("/#agora") com o app JÁ aberto
+// dispara popstate com state nulo e cai na home em vez da tela pedida
+window.addEventListener('popstate', (e) =>
+  mostrar(e.state?.tela ?? location.hash.replace('#', '') ?? 'home', { push: false }))
 
 // ── Estado compartilhado ─────────────────────────────────────────────────────
 let mapaHoje = []
+let minhas = []
 let salas = []
 let cfg = {}
 let totalAlunos = null
 let pronto = null
 let mapaCarregado = false
 
-// ── Faculdade agora ──────────────────────────────────────────────────────────
+// ── Rede ─────────────────────────────────────────────────────────────────────
 // Rede de celular pendura requisição sem avisar, e sem teto de tempo a tela
 // ficava em fantasma pra sempre: foi assim que, em aula do Osmar às 10:59, a
-// busca respondeu "sem aula hoje" pra uma aula que estava acontecendo.
+// busca respondeu "sem aula hoje" pra uma aula que estava acontecendo. O teto
+// existia só no boot; as outras quinze chamadas do arquivo não tinham nenhum.
 const comTeto = (p, ms = 9000) => Promise.race([
   p,
   new Promise((_, falha) => setTimeout(() => falha(new Error('tempo esgotado')), ms)),
 ])
+
+// Erro do servidor vira frase que o aluno entende. Sem isto o app chamava tudo
+// de "você já tem essa matéria nesse dia", inclusive sessão expirada.
+function erroLegivel(e) {
+  const c = e?.code ?? ''
+  if (c === '23505') return { tipo: 'duplicado', msg: 'Isso já está na sua lista.' }
+  if (c === 'PGRST301' || e?.status === 401 || e?.status === 403) {
+    return { tipo: 'sessao', msg: 'Sua sessão expirou. Entra de novo.' }
+  }
+  if (c === '42501') return { tipo: 'permissao', msg: 'Sua conta não tem permissão pra isso.' }
+  if (c === '23514' || c === '23502') return { tipo: 'invalido', msg: 'Dado inválido.' }
+  return { tipo: 'servidor', msg: 'Sem resposta do servidor. Tenta de novo.' }
+}
+
+// Toda ida ao servidor passa por aqui: teto de tempo, erro classificado, e
+// nenhuma promessa solta morrendo em silêncio no console.
+async function chamar(q, ms = 9000) {
+  if (!sb) {
+    return { data: null, error: { tipo: 'offline', msg: 'O app não carregou por completo.' } }
+  }
+  let r
+  try {
+    r = await comTeto(Promise.resolve(q), ms)
+  } catch {
+    return { data: null, error: { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' } }
+  }
+  if (r?.error) return { data: null, error: erroLegivel(r.error) }
+  return { data: r?.data ?? null, error: null }
+}
+
+// Botão que faz rede fica travado enquanto espera. Nenhum ficava: dois toques
+// viravam duas matérias, duas reclamações, dois logins do Google.
+async function ocupado(btn, tarefa) {
+  if (!btn || btn.disabled) return
+  btn.disabled = true
+  btn.setAttribute('aria-busy', 'true')
+  try {
+    return await tarefa()
+  } finally {
+    btn.disabled = false
+    btn.removeAttribute('aria-busy')
+  }
+}
+
+// ── Faculdade agora ──────────────────────────────────────────────────────────
+// Duas cargas simultâneas escreviam o mesmo estado sem ordem: o aluno tocava
+// "Tentar de novo", a tela pintava certo, e 9s depois a chamada velha estourava
+// o teto e chamava falhaNoMapa(), apagando a tela boa.
+let seqAgora = 0
 
 async function carregarAgora({ ghost = false } = {}) {
   if (!sb) return              // sem bundle não há o que buscar; o aviso já está na tela
@@ -181,20 +252,30 @@ async function carregarAgora({ ghost = false } = {}) {
     ghostChips($('livres-grade'))
     ghostLinhas($('board-agora'))
   }
+  const meu = ++seqAgora
   let mapa, inv, conf, quantos
   try {
     [mapa, inv, conf, quantos] = await comTeto(Promise.all([
-      sb.from('mapa_dia').select('categoria,turma,codigo,disciplina,horario,professor,sala,sala_canon')
+      sb.from('mapa_dia').select('turma,codigo,disciplina,horario,professor,sala,sala_canon')
         .eq('data', hojeISO()),
       sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
       sb.from('config').select('key,value'),
       sb.rpc('total_alunos'),
     ]))
   } catch {
-    falhaNoMapa()
+    if (meu === seqAgora) falhaNoMapa()
     return
   }
+  if (meu !== seqAgora) return          // resposta velha não pinta por cima da nova
   if (mapa.error || inv.error) { falhaNoMapa(); return }
+
+  // Mapa vazio em dia útil dentro de horário de aula NÃO é "tudo livre": é o
+  // mapa que ainda não chegou. A retenção apaga às 00:30 e a primeira captura
+  // do dia é às 05h, e em 11/08 o app passou a madrugada inteira anunciando
+  // salas livres demais e nenhuma aula.
+  const diaUtil = agoraBRT().getDay() >= 1 && agoraBRT().getDay() <= 5
+  if (!mapa.data.length && diaUtil && slotAtual()) { falhaNoMapa({ vazio: true }); return }
+
   $('agora-falha').hidden = true
   mapaCarregado = true
   mapaHoje = mapa.data
@@ -203,6 +284,10 @@ async function carregarAgora({ ghost = false } = {}) {
   if (!quantos.error && typeof quantos.data === 'number') totalAlunos = quantos.data
   aplicarTrava()
   pintarAgora()
+  // "Hoje" do aluno é montado cruzando as matérias com este mapa. Quando o
+  // login resolvia primeiro (rota mais curta), a tela dizia "sem sala no mapa
+  // de hoje" em TODAS as matérias e nunca mais se corrigia sozinha.
+  if (perfil) pintarHoje()
 }
 
 // Data, turno e contagem pro próximo slot saem do RELÓGIO, não do servidor.
@@ -272,7 +357,7 @@ function pintarAgora() {
   $('board-agora').replaceChildren(...rolando.map((r) => li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
-    <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}${esc(rotuloCru(r))}</span>`)))
+    <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
 
   // quantos já usam: prova social pra quem chega pelo QR code sem conta
@@ -285,28 +370,46 @@ function pintarAgora() {
   const cap = cfg.ultima_captura
   const em = cap && (cap.em ?? cap.quando ?? cap)
   const quando = em ? new Date(em) : null
-  $('pill-frescor').hidden = !(quando && !isNaN(quando))
-  if (quando && !isNaN(quando)) {
-    $('pill-frescor').textContent = 'mapa de ' + quando.toLocaleTimeString('pt-BR',
-      { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+  const valido = quando && !isNaN(quando)
+  $('pill-frescor').hidden = !valido
+  if (valido) {
+    const tz = { timeZone: 'America/Sao_Paulo' }
+    const hora = quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...tz })
+    // hora sem data parece recente: às 8h da manhã a pill dizia "mapa de 22:40"
+    // e nada avisava que aquilo era da véspera
+    const deHoje = quando.toLocaleDateString('sv-SE', tz) === hojeISO()
+    $('pill-frescor').textContent = deHoje
+      ? `mapa de ${hora}`
+      : `mapa de ${quando.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', ...tz })}, ${hora}`
+    $('pill-frescor').classList.toggle('pill-ouro', !deHoje)
+    $('pill-frescor').classList.toggle('pill-fraco', deHoje)
   }
 }
 
-function falhaNoMapa() {
+function falhaNoMapa({ vazio = false } = {}) {
   mapaCarregado = false
   pintarRelogio()                       // data e turno não dependem do servidor
   $('agora-falha').hidden = false
+  $('agora-falha').firstChild.textContent = vazio
+    ? 'O mapa de hoje ainda não chegou da planilha da faculdade. Ele é capturado ' +
+      'de 20 em 20 minutos a partir das 5h. '
+    : 'Não deu pra carregar o mapa de hoje. Se você está na rede da faculdade, ' +
+      'ela pode estar bloqueando o servidor do app: tenta pelo 4G ou 5G. '
   $('livres-num').classList.remove('ghost-num')
   $('livres-num').textContent = '–'
-  $('livres-rotulo').textContent = 'não deu pra saber quais salas estão livres'
+  $('livres-rotulo').textContent = vazio
+    ? 'o mapa de hoje ainda não chegou'
+    : 'não deu pra saber quais salas estão livres'
   $('pill-livres').textContent = 'sem mapa'
   $('livres-grade').replaceChildren()
   $('board-agora').replaceChildren()
   $('agora-vazio').hidden = true
-  toast('Não deu pra carregar o mapa de hoje.')
+  if (perfil) pintarHoje()
+  toast(vazio ? 'O mapa de hoje ainda não chegou.' : 'Não deu pra carregar o mapa de hoje.')
 }
 
-$('btn-retry').addEventListener('click', () => { pronto = carregarAgora({ ghost: true }) })
+$('btn-retry').addEventListener('click', (e) =>
+  ocupado(e.currentTarget, () => (pronto = carregarAgora({ ghost: true }))))
 // handler em JS, nunca onclick inline: a CSP não tem 'unsafe-inline' em
 // script-src e handler inline morre calado (foi assim que a Inter não carregava)
 $('btn-recarregar').addEventListener('click', () => location.reload())
@@ -321,27 +424,49 @@ function aplicarTrava() {
 
 // ── Planilha dinâmica ────────────────────────────────────────────────────────
 let buscaTimer
+// duas buscas em voo e a mais VELHA chegando depois sobrescreviam a nova: quem
+// digitava "sist" e completava "sistemas embarcados" via a lista voltar
+let seqBusca = 0
 $('busca-input').addEventListener('input', (e) => {
   clearTimeout(buscaTimer)
-  buscaTimer = setTimeout(() => buscar(e.target.value.trim()), 300)
+  const termo = e.target.value.trim()
+  buscaTimer = setTimeout(() => buscar(termo), 300)
 })
 
-const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.turma]
+$('btn-busca-retry').addEventListener('click', (e) =>
+  ocupado(e.currentTarget, () => buscar($('busca-input').value.trim())))
+
+// `sala_canon` entra: o placeholder promete busca por sala, mas só o rótulo cru
+// da planilha era olhado, então procurar "P2-202" (o número que está na porta)
+// não achava nada
+const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_canon, r.turma]
   .some((v) => String(v ?? '').toLowerCase().includes(alvo))
 
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
 async function buscar(termo) {
   const lista = $('busca-lista')
+  $('busca-falha').hidden = true
   if (termo.length < 2) {
     lista.replaceChildren()
     $('busca-vazio').hidden = true
+    $('busca-sem-mapa').hidden = true
     $('busca-dica').hidden = false
     return
   }
   $('busca-dica').hidden = true
+  // sem o bundle não existe busca: antes disto a dica sumia ao digitar, o
+  // `sb.from` lançava, e sobravam quatro esqueletos pulsando pra sempre
+  if (!sb) {
+    lista.replaceChildren()
+    $('busca-vazio').hidden = true
+    $('busca-falha').hidden = false
+    return
+  }
   ghostLinhas(lista, 4)
+  const meu = ++seqBusca
   await pronto            // sem isto a primeira busca da sessão marca tudo "sem aula hoje"
+  if (meu !== seqBusca) return
 
   const alvo = termo.toLowerCase()
   // 1) o mapa de hoje responde onde e quando, inclusive reserva sem código
@@ -362,11 +487,20 @@ async function buscar(termo) {
   // parêntese digitados na busca mudavam a expressão do filtro (o mínimo era
   // erro 400 em quem buscasse "PA: INTRO, DIREITO"). Valor entre aspas resolve.
   const t = aspasPostgrest(`%${termo}%`)
-  const { data, error } = await sb.from('disciplinas_historico')
+  const { data, error } = await chamar(sb.from('disciplinas_historico')
     .select('codigo,turma,disciplina,professor')
     .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)
-    .limit(30)
-  if (error) { toast('Busca falhou. Tenta de novo.'); return }
+    .limit(30))
+  if (meu !== seqBusca) return
+  // o `return` seco deixava os quatro esqueletos pulsando pra sempre e o toast
+  // sumia em 3,2s: o aluno ficava olhando um fantasma sem explicação nenhuma
+  if (error) {
+    lista.replaceChildren()
+    $('busca-vazio').hidden = true
+    $('busca-sem-mapa').hidden = true
+    $('busca-falha').hidden = false
+    return
+  }
   const semAulaHoje = (data ?? []).filter((r) => !codigosHoje.has(r.codigo))
 
   const cards = [
@@ -385,15 +519,12 @@ async function buscar(termo) {
 // ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") e, dentro de um chip, engolia a
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
-// o rótulo cru da planilha ("202 (P2) LAB.REDES") não vai mais pra tela: o chip
-// já mostra a canônica, que é o número que está na porta
-const rotuloCru = () => ''
 
 function cardAula(r) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
-    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}${esc(rotuloCru(r))}</span>`)
+    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}</span>`)
   if (perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
   return el
 }
@@ -418,7 +549,7 @@ function acoesAdicionar(r, { dia } = {}) {
     // linha do mapa de hoje: o app JÁ sabe o dia, então não pergunta. O seletor
     // aqui era decoração que dava chance de errar
     btn.textContent = `Adicionar na ${DIAS[dia]}`
-    btn.addEventListener('click', () => adicionarMateria(r, dia))
+    btn.addEventListener('click', () => adicionarMateria(r, dia, btn))
     acoes.append(btn)
     return acoes
   }
@@ -430,7 +561,7 @@ function acoesAdicionar(r, { dia } = {}) {
   sel.setAttribute('aria-label', 'Dia da semana')
   sel.innerHTML = DIAS.map((d, i) => (i ? `<option value="${i}">${d}</option>` : '')).join('')
   btn.textContent = 'Adicionar'
-  btn.addEventListener('click', () => adicionarMateria(r, +sel.value))
+  btn.addEventListener('click', () => adicionarMateria(r, +sel.value, btn))
   acoes.append(sel, btn)
   return acoes
 }
@@ -438,6 +569,7 @@ function acoesAdicionar(r, { dia } = {}) {
 // ── Conta ────────────────────────────────────────────────────────────────────
 let sessao = null
 let perfil = null
+let perfilDesconhecido = false   // rede falhou: não dá pra afirmar que ele não tem conta
 let intencao = 'entrar'
 
 function aplicarIntencao(qual) {
@@ -451,30 +583,71 @@ function aplicarIntencao(qual) {
 }
 
 function mostrarConta() {
-  $('cta-conta').hidden = !!perfil       // logado não precisa ver "Criar conta"
-  $('materias-cta').hidden = !perfil
+  const logado = !!(sessao && perfil)
+  const cadastrando = !!(sessao && !perfil && !perfilDesconhecido)
+  $('cta-conta').hidden = logado         // logado não precisa ver "Criar conta"
+  $('materias-cta').hidden = !logado
   $('conta-deslogado').hidden = !!sessao
-  $('conta-cadastro').hidden = !(sessao && !perfil)
-  $('conta-logado').hidden = !(sessao && perfil)
+  $('conta-cadastro').hidden = !cadastrando
+  $('conta-falha').hidden = !(sessao && perfilDesconhecido)
+  $('conta-logado').hidden = !logado
   // logado, os dois botões de conta colapsam num só
-  $('btn-menu-entrar').textContent = perfil ? `Minhas aulas (${perfil.username})` : 'Entrar'
-  $('btn-menu-criar').hidden = !!perfil
-  if (sessao && !perfil) mostrar('conta')   // volta do OAuth cai no passo pendente
+  $('btn-menu-entrar').textContent = logado ? `Minhas aulas (${perfil.username})` : 'Entrar'
+  $('btn-menu-criar').hidden = logado
+  if (cadastrando) mostrar('conta')      // volta do OAuth cai no passo pendente
+}
+
+// A tela guardava a lista de matérias e, no admin, o email de todos os alunos.
+// Sair não limpava nada disso do DOM até o próximo login.
+function limparDadosNaTela() {
+  for (const id of ['lista-materias', 'board-hoje', 'admin-alunos', 'admin-reclamacoes']) {
+    $(id).replaceChildren()
+  }
+  $('bloco-admin').hidden = true
 }
 
 async function carregarPerfil() {
-  if (!sessao) { perfil = null; mostrarConta(); aplicarTrava(); return }
-  const { data } = await sb.from('alunos').select('*').eq('id', sessao.user.id).maybeSingle()
+  if (!sessao) {
+    perfil = null
+    perfilDesconhecido = false
+    limparDadosNaTela()
+    mostrarConta()
+    aplicarTrava()
+    return
+  }
+  const { data, error } = await chamar(sb.from('alunos')
+    .select('id,username,email,role,bloqueado,receber_email')
+    .eq('id', sessao.user.id).maybeSingle())
+
+  // "não tenho perfil" é diferente de "não sei se tenho perfil". Com o erro
+  // tratado como ausência, uma falha de rede convidava quem já tem conta a
+  // criar outra, e ainda arrancava a pessoa da tela em que ela estava.
+  perfilDesconhecido = !!error
+  if (error) { mostrarConta(); toast(error.msg); return }
+
   perfil = data
   mostrarConta()
   aplicarTrava()
   if (perfil) {
-    sb.rpc('touch_ultimo_acesso').then(() => {})
+    tocarUltimoAcesso()
     carregarMinhas()
     atualizarBotaoPush()
     $('bloco-admin').hidden = perfil.role !== 'admin'
     if (perfil.role === 'admin') carregarAdmin()
   }
+}
+
+// A 0001 promete "throttle fica no client; smart-write do v1 era 6h" e esse
+// throttle nunca existiu: escrevia a cada evento de auth, inclusive no refresh
+// de token de hora em hora.
+function tocarUltimoAcesso() {
+  const chave = 'ibsala:ultimo-acesso'
+  try {
+    const ultimo = Number(localStorage.getItem(chave) ?? 0)
+    if (Date.now() - ultimo < 6 * 60 * 60 * 1000) return
+    localStorage.setItem(chave, String(Date.now()))
+  } catch { /* localStorage bloqueado (navegação privada): toca do mesmo jeito */ }
+  chamar(sb.rpc('touch_ultimo_acesso'))
 }
 
 // ── Push (avisos de sala) ────────────────────────────────────────────────────
@@ -506,6 +679,10 @@ async function atualizarBotaoPush() {
     chk.disabled = true
     chk.checked = false
     rotulo.textContent = 'Avisos não suportados neste navegador'
+    // a dica continuava prometendo "você recebe a sala ~50 min antes", que é o
+    // contrário do que o rótulo acabou de dizer
+    dica.textContent = 'Este navegador não entrega notificação. No iPhone, use o ' +
+      'Safari com o app na Tela de Início; no computador, Chrome, Edge ou Firefox.'
     return
   }
   // no iPhone o subscribe só funciona com o app na Tela de Início, e sem dizer
@@ -520,7 +697,22 @@ async function atualizarBotaoPush() {
   }
   chk.disabled = false
   rotulo.textContent = 'Avisos neste aparelho'
-  chk.checked = !!(await subAtual())
+  dica.textContent = 'Você recebe a sala de cada aula ~50 minutos antes do horário.'
+
+  // O interruptor lia só o PushManager do navegador. Quando a linha sumia do
+  // banco (o push-slot apaga a inscrição no 410) o aluno via "ligado", confiava,
+  // e não recebia aviso nenhum: o app afirmando com confiança o que não sabia.
+  const sub = await subAtual()
+  chk.checked = !!sub && !!(await chamar(sb.from('push_subscriptions')
+    .select('endpoint').eq('endpoint', sub.endpoint).maybeSingle())).data
+}
+
+async function salvarInscricao(sub) {
+  const j = sub.toJSON()
+  return chamar(sb.from('push_subscriptions').upsert({
+    aluno_id: sessao.user.id, endpoint: j.endpoint,
+    p256dh: j.keys.p256dh, auth: j.keys.auth,
+  }, { onConflict: 'endpoint' }))
 }
 
 $('chk-push').addEventListener('change', async (e) => {
@@ -539,14 +731,22 @@ $('chk-push').addEventListener('change', async (e) => {
 
     if (!querLigar) {
       if (sub) {
-        await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+        const { error } = await chamar(sb.from('push_subscriptions')
+          .delete().eq('endpoint', sub.endpoint))
+        if (error) { toast(error.msg); return }
         await sub.unsubscribe()
       }
       toast('Avisos desativados.')
       return
     }
 
-    if (sub) return                     // já estava inscrito, nada a fazer
+    // inscrição do navegador já existe: pode ser que ela só tenha sumido do
+    // banco, e aí o certo é gravar de novo, não sair calado
+    if (sub) {
+      const { error } = await salvarInscricao(sub)
+      toast(error ? error.msg : 'Avisos ativados neste aparelho.')
+      return
+    }
     const perm = await pedido
     if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
     const reg = await navigator.serviceWorker.ready
@@ -554,12 +754,8 @@ $('chk-push').addEventListener('change', async (e) => {
       userVisibleOnly: true,
       applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
     })
-    const j = nova.toJSON()
-    const { error } = await sb.from('push_subscriptions').insert({
-      aluno_id: sessao.user.id, endpoint: j.endpoint,
-      p256dh: j.keys.p256dh, auth: j.keys.auth,
-    })
-    if (error) { toast('Não deu pra registrar o aviso.'); await nova.unsubscribe(); return }
+    const { error } = await salvarInscricao(nova)
+    if (error) { toast(error.msg); await nova.unsubscribe(); return }
     toast('Avisos ativados neste aparelho.')
   } finally {
     chk.disabled = false
@@ -569,20 +765,23 @@ $('chk-push').addEventListener('change', async (e) => {
 })
 
 // ── Reclamações / dados (LGPD) ───────────────────────────────────────────────
-$('form-reclamacao').addEventListener('submit', async (e) => {
+$('form-reclamacao').addEventListener('submit', (e) => {
   e.preventDefault()
-  const desc = $('reclamacao-input').value.trim()
-  if (!desc) return
-  const { error } = await sb.from('reclamacoes').insert({
-    aluno_id: sessao.user.id, descricao: desc,
+  const btn = e.target.querySelector('button')
+  return ocupado(btn, async () => {
+    const desc = $('reclamacao-input').value.trim()
+    if (!desc) return
+    const { error } = await chamar(sb.from('reclamacoes').insert({
+      aluno_id: sessao.user.id, descricao: desc,
+    }))
+    toast(error ? error.msg : 'Reclamação enviada. Valeu!')
+    if (!error) $('reclamacao-input').value = ''
   })
-  toast(error ? 'Não deu pra enviar. Tenta de novo.' : 'Reclamação enviada. Valeu!')
-  if (!error) $('reclamacao-input').value = ''
 })
 
-$('btn-export').addEventListener('click', async () => {
-  const { data, error } = await sb.rpc('exportar_meus_dados')
-  if (error) { toast('Export falhou. Tenta de novo.'); return }
+$('btn-export').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+  const { data, error } = await chamar(sb.rpc('exportar_meus_dados'))
+  if (error) { toast(error.msg); return }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -594,7 +793,9 @@ $('btn-export').addEventListener('click', async () => {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
-})
+  // sem confirmação, quem não visse o download aparecer tocava cinco vezes
+  toast('Arquivo com seus dados gerado.')
+}))
 
 let excluirArmado = false
 $('btn-excluir').addEventListener('click', async () => {
@@ -607,30 +808,46 @@ $('btn-excluir').addEventListener('click', async () => {
     }, 6000)
     return
   }
-  const { error } = await sb.functions.invoke('apagar-conta')
-  if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
-  await sb.auth.signOut()
-  mostrar('home')
-  toast('Conta e dados excluídos.')
+  await ocupado($('btn-excluir'), async () => {
+    const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000)
+    if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
+    // se o signOut remoto falhar, a sessão de uma conta que não existe mais
+    // fica no aparelho e TODA query passa a falhar em silêncio
+    await sb.auth.signOut().catch(() => sb.auth.signOut({ scope: 'local' }))
+    mostrar('home')
+    toast('Conta e dados excluídos.')
+  })
 })
 
 // ── Admin ────────────────────────────────────────────────────────────────────
 async function carregarAdmin() {
   const [conf, recs, todos] = await Promise.all([
-    sb.from('config').select('value').eq('key', 'travado').single(),
-    sb.from('reclamacoes').select('id,descricao,criado,alunos(username)')
-      .is('resolvido_em', null).order('criado'),
-    sb.from('alunos').select('id,username,email,role,bloqueado').order('criado'),
+    chamar(sb.from('config').select('value').eq('key', 'travado').single()),
+    chamar(sb.from('reclamacoes').select('id,descricao,criado,alunos(username)')
+      .is('resolvido_em', null).order('criado')),
+    chamar(sb.from('alunos').select('id,username,email,role,bloqueado').order('criado')),
   ])
 
+  // o painel dizia "nenhuma reclamação aberta" quando a query tinha falhado, e
+  // a lista de alunos ficava vazia sem explicação
+  const falhou = conf.error || recs.error || todos.error
+  $('admin-falha').hidden = !falhou
+  if (falhou) return
+
   const travado = conf.data?.value === true
+  $('btn-trava').hidden = false
   $('btn-trava').textContent = travado ? 'Destravar o site' : 'Travar o site'
-  $('btn-trava').onclick = async () => {
-    await sb.from('config').update({ value: !travado }).eq('key', 'travado')
+  $('btn-trava').onclick = () => ocupado($('btn-trava'), async () => {
+    const { error } = await chamar(
+      sb.from('config').update({ value: !travado }).eq('key', 'travado'))
+    // o estado local era mutado ANTES de saber se o servidor aceitou: o admin
+    // via a tela mudar e achava que tinha travado o site enquanto todo mundo
+    // seguia navegando
+    if (error) { toast(error.msg); return }
     cfg.travado = !travado
     aplicarTrava()
     carregarAdmin()
-  }
+  })
 
   const lr = $('admin-reclamacoes')
   lr.replaceChildren(...(recs.data ?? []).map((r) => {
@@ -642,10 +859,12 @@ async function carregarAdmin() {
     const btn = document.createElement('button')
     btn.className = 'mini'
     btn.textContent = 'Resolver'
-    btn.addEventListener('click', async () => {
-      await sb.from('reclamacoes').update({ resolvido_em: new Date().toISOString() }).eq('id', r.id)
+    btn.addEventListener('click', () => ocupado(btn, async () => {
+      const { error } = await chamar(sb.from('reclamacoes')
+        .update({ resolvido_em: new Date().toISOString() }).eq('id', r.id))
+      if (error) { toast(error.msg); return }
       carregarAdmin()
-    })
+    }))
     acoes.append(btn)
     el.append(acoes)
     return el
@@ -663,10 +882,13 @@ async function carregarAdmin() {
       const btn = document.createElement('button')
       btn.className = 'mini'
       btn.textContent = a.bloqueado ? 'Desbloquear' : 'Bloquear'
-      btn.addEventListener('click', async () => {
-        await sb.from('alunos').update({ bloqueado: !a.bloqueado }).eq('id', a.id)
+      btn.addEventListener('click', () => ocupado(btn, async () => {
+        const { error } = await chamar(sb.from('alunos')
+          .update({ bloqueado: !a.bloqueado }).eq('id', a.id))
+        if (error) { toast(error.msg); return }
+        toast(a.bloqueado ? 'Aluno desbloqueado.' : 'Aluno bloqueado.')
         carregarAdmin()
-      })
+      }))
       acoes.append(btn)
       el.append(acoes)
     }
@@ -674,31 +896,58 @@ async function carregarAdmin() {
   }))
 }
 
-$('btn-login').addEventListener('click', async () => {
+$('btn-login').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+  if (!sb) { toast('O app não carregou por completo. Recarrega a página.'); return }
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: location.origin + location.pathname },
   })
-  if (error) toast('Login Google ainda não configurado neste ambiente.')
-})
+  // "não configurado" era a frase pra QUALQUER erro, inclusive rede caída
+  if (error) toast('Não deu pra abrir o login do Google. Tenta de novo.')
+}))
 
-$('btn-sair').addEventListener('click', async () => {
-  await sb.auth.signOut()
-  toast('Você saiu.')
-})
+$('btn-sair').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+  const { error } = await sb.auth.signOut()
+  toast(error ? 'Não deu pra sair. Tenta de novo.' : 'Você saiu.')
+}))
 
-$('form-username').addEventListener('submit', async (e) => {
+$('btn-conta-retry').addEventListener('click', (ev) =>
+  ocupado(ev.currentTarget, () => carregarPerfil()))
+
+$('form-username').addEventListener('submit', (e) => {
   e.preventDefault()
-  const u = $('username-input').value.trim()
-  const { data: livre } = await sb.rpc('username_disponivel', { candidato: u })
-  if (!livre) { toast('Esse username já existe. Tenta outro.'); return }
-  const { error } = await sb.from('alunos').insert({
-    id: sessao.user.id, username: u, email: sessao.user.email,
+  const btn = e.target.querySelector('button')
+  return ocupado(btn, async () => {
+    const u = $('username-input').value.trim()
+    mostrarErroUsername('')
+
+    const { data: livre, error: eChecagem } = await chamar(
+      sb.rpc('username_disponivel', { candidato: u }))
+    // o erro era descartado e `livre` virava undefined, ou seja falsy: rede
+    // oscilando dizia "esse username já existe" pra todo nome que ele tentasse,
+    // e o cadastro morria aí
+    if (eChecagem) { mostrarErroUsername(eChecagem.msg); return }
+    if (!livre) { mostrarErroUsername('Esse username já existe. Tenta outro.'); return }
+
+    const { error } = await chamar(sb.from('alunos').insert({
+      id: sessao.user.id, username: u, email: sessao.user.email,
+    }))
+    if (error) {
+      mostrarErroUsername(error.tipo === 'duplicado'
+        ? 'Esse username já existe. Tenta outro.' : error.msg)
+      return
+    }
+    toast(`Bem-vindo/a, ${u}!`)
+    carregarPerfil()
   })
-  if (error) { toast('Não deu pra criar a conta. Tenta de novo.'); return }
-  toast(`Bem-vindo/a, ${u}!`)
-  carregarPerfil()
 })
+
+// erro do cadastro fica ao lado do campo. Em toast ele sumia em 3,2 segundos,
+// no canto da tela, no passo mais importante do app
+function mostrarErroUsername(msg) {
+  $('username-erro').textContent = msg
+  $('username-erro').hidden = !msg
+}
 
 async function carregarMinhas() {
   ghostLinhas($('lista-materias'), 3)
@@ -706,35 +955,59 @@ async function carregarMinhas() {
   // filtro explicito por aluno: a policy de materias é
   // `aluno_id = auth.uid() OR is_admin()`, então admin sem WHERE enxerga a
   // matéria de TODO MUNDO e "Minhas matérias" listava as 79 dos 18 alunos
-  const { data, error } = await sb.from('materias')
+  const { data, error } = await chamar(sb.from('materias')
     .select('id,dia,turma,disciplina,professor,codigo')
     .eq('aluno_id', sessao.user.id)
-    .order('dia').order('disciplina')
-  if (error) return
-  const lista = $('lista-materias')
-  lista.replaceChildren(...data.map((m) => {
+    .order('dia').order('disciplina'))
+
+  // o `return` seco deixava as DUAS listas em esqueleto pra sempre, sem
+  // mensagem e sem botão, na tela mais importante do aluno logado
+  if (error) {
+    $('lista-materias').replaceChildren()
+    $('board-hoje').replaceChildren()
+    $('materias-vazio').hidden = true
+    $('hoje-vazio').hidden = true
+    $('materias-falha').hidden = false
+    return
+  }
+  $('materias-falha').hidden = true
+  minhas = data ?? []
+
+  $('lista-materias').replaceChildren(...minhas.map((m) => {
     const el = li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala">${DIAS[m.dia] ?? '?'}</span>
+      <span class="dia-chip">${DIAS[m.dia] ?? '?'}</span>
       <span class="meta">${esc(m.turma)} · ${esc(m.professor ?? '')} · ${esc(m.codigo)}</span>`)
     const acoes = document.createElement('span')
     acoes.className = 'acoes'
     const btn = document.createElement('button')
     btn.className = 'mini'
     btn.textContent = 'Remover'
-    btn.addEventListener('click', async () => {
-      await sb.from('materias').delete().eq('id', m.id)
+    btn.addEventListener('click', () => ocupado(btn, async () => {
+      const { error: e } = await chamar(sb.from('materias').delete()
+        .eq('id', m.id).eq('aluno_id', sessao.user.id))
+      // sem checar erro, a lista recarregava idêntica e o item continuava lá
+      // sem ninguém explicar por quê
+      if (e) { toast(e.msg); return }
+      toast('Matéria removida.')
       carregarMinhas()
-    })
+    }))
     acoes.append(btn)
     el.append(acoes)
     return el
   }))
-  $('materias-vazio').hidden = data.length > 0
+  $('materias-vazio').hidden = minhas.length > 0
+  pintarHoje()
+}
 
-  const hoje = agoraBRT().getDay()
-  const deHoje = data.filter((m) => m.dia === hoje)
+// Separado de carregarMinhas porque o "Hoje" depende de DUAS cargas (as
+// matérias e o mapa) e o login costuma ganhar do mapa: montando tudo junto, a
+// tela dizia "sem sala no mapa de hoje" em todas as matérias e nunca mais se
+// corrigia, nem quando o mapa chegava três segundos depois.
+function pintarHoje() {
   const board = $('board-hoje')
+  const hoje = agoraBRT().getDay()
+  const deHoje = minhas.filter((m) => m.dia === hoje)
 
   // "Hoje" é uma agenda, então ordena por HORÁRIO, não por nome de disciplina:
   // a query vem por `disciplina` e isso punha a aula de 09:50 antes da de 07:30.
@@ -753,21 +1026,30 @@ async function carregarMinhas() {
     ? li(`
       <span class="disc">${esc(m.disciplina)}</span>
       <span class="sala">${esc(chipSala(aula))}</span>
-      <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}${esc(rotuloCru(aula))}</span>`)
+      <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}</span>`)
     : li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala sala-vazia">—</span>
-      <span class="meta">sem sala no mapa de hoje · ${esc(m.turma)}</span>`))))
+      <span class="sala sala-vazia" aria-label="sala desconhecida">—</span>
+      <span class="meta">${mapaCarregado ? 'sem sala no mapa de hoje'
+        : 'mapa de hoje indisponível'} · ${esc(m.turma)}</span>`))))
   $('hoje-vazio').hidden = deHoje.length > 0
 }
 
-async function adicionarMateria(r, dia) {
-  const { error } = await sb.from('materias').insert({
-    aluno_id: sessao.user.id, dia,
-    turma: r.turma ?? '', disciplina: r.disciplina, professor: r.professor, codigo: r.codigo,
+async function adicionarMateria(r, dia, btn) {
+  return ocupado(btn, async () => {
+    const { error } = await chamar(sb.from('materias').insert({
+      aluno_id: sessao.user.id, dia,
+      turma: r.turma ?? '', disciplina: r.disciplina, professor: r.professor, codigo: r.codigo,
+    }))
+    // toda falha virava "você já tem essa matéria nesse dia", inclusive sessão
+    // expirada: o aluno acreditava, ia conferir e não estava lá
+    if (error) {
+      toast(error.tipo === 'duplicado' ? `Você já tem essa matéria na ${DIAS[dia]}.` : error.msg)
+      return
+    }
+    toast(`Adicionada na ${DIAS[dia]}.`)
+    carregarMinhas()
   })
-  toast(error ? 'Você já tem essa matéria nesse dia.' : `Adicionada na ${DIAS[dia]}.`)
-  if (!error) carregarMinhas()
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
@@ -788,6 +1070,14 @@ if (!sb) {
     'Não deu pra carregar a biblioteca do app. Se você está numa rede que filtra ' +
     'endereços, pode ser isso. '
   $('busca-dica').textContent = 'Busca fora do ar até a página carregar por completo.'
+  $('busca-falha').hidden = false
+  // a conta ficava em branco: os três blocos nascem hidden e quem destrava é o
+  // onAuthStateChange, que sem bundle nunca é registrado
+  $('conta-falha').hidden = false
+  $('conta-falha').firstChild.textContent =
+    'O app não carregou por completo, então não dá pra entrar agora. Se você está ' +
+    'numa rede que filtra endereços, tenta pelo 4G. '
+  $('conta-deslogado').hidden = true
   $('btn-retry').onclick = () => location.reload()
 } else {
   sb.auth.onAuthStateChange((_ev, s) => {

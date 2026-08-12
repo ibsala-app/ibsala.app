@@ -66,7 +66,7 @@
       <p class="tagline">Veja onde é cada aula e quais salas estão livres agora, sem se perder
         na planilha.</p>
 
-      <nav class="menu">
+      <nav class="menu" aria-label="Principal">
         <button class="btn-menu primario" data-vai="buscar">Planilha dinâmica</button>
         <button class="btn-menu" data-vai="agora">Faculdade agora</button>
         <button id="btn-menu-entrar" class="btn-menu" data-vai="conta" data-intencao="entrar">Entrar</button>
@@ -90,7 +90,7 @@
             <div id="livres-grade" class="grade-salas"></div>
           </div>
 
-          <p id="agora-falha" class="falha" hidden>Não deu pra carregar o mapa de hoje.
+          <p id="agora-falha" class="falha" role="alert" hidden>Não deu pra carregar o mapa de hoje.
             Se você está na rede da faculdade, ela pode estar bloqueando o servidor do app:
             tenta pelo 4G ou 5G.
             <button id="btn-retry" class="mini">Tentar de novo</button>
@@ -100,8 +100,8 @@
         <div class="coluna">
           <h2 class="secao">Acontecendo agora</h2>
           <ol id="board-agora" class="board"></ol>
-          <p id="agora-vazio" class="vazio" hidden>Nenhuma aula neste horário. O mapa do dia
-            chega às 5h em dia de aula.</p>
+          <p id="agora-vazio" class="vazio" hidden>Nenhuma aula neste horário. O mapa do dia é
+            capturado de 20 em 20 minutos, a partir das 5h.</p>
         </div>
       </div>
     </section>
@@ -118,9 +118,12 @@
       </label>
       <p id="busca-dica" class="vazio">Digite duas letras pra começar. Quem tem aula hoje vem
         primeiro, com sala e horário; o resto aparece como catálogo.</p>
-      <p id="busca-sem-mapa" class="falha" hidden>O mapa de hoje não carregou, então não sei
-        quais destas têm aula agora.
+      <p id="busca-sem-mapa" class="falha" role="alert" hidden>O mapa de hoje não carregou, então
+        não sei quais destas têm aula agora.
         <button id="btn-recarregar" class="mini">Recarregar</button>
+      </p>
+      <p id="busca-falha" class="falha" role="alert" hidden>A busca não respondeu.
+        <button id="btn-busca-retry" class="mini">Tentar de novo</button>
       </p>
       <ol id="busca-lista" class="board"></ol>
       <p id="busca-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
@@ -134,7 +137,7 @@
       <button class="voltar" data-vai="home">← Voltar</button>
       <h1 class="tela-titulo" data-cabeca tabindex="-1">Sua conta</h1>
 
-      <div id="conta-deslogado" hidden>
+      <div id="conta-deslogado">
         <div class="painel-cabeca">
           <h2 class="painel-titulo" id="conta-titulo">Suas aulas, sua sala</h2>
           <p id="conta-texto">Entre pra ver onde é sua próxima aula e receber aviso de sala antes
@@ -143,15 +146,22 @@
         <button id="btn-login" class="btn-menu primario">Entrar com Google</button>
       </div>
 
+      <p id="conta-falha" class="falha" role="alert" hidden>Não deu pra carregar sua conta.
+        <button id="btn-conta-retry" class="mini">Tentar de novo</button>
+      </p>
+
       <div id="conta-cadastro" hidden>
         <h2 class="secao">Escolha seu username</h2>
+        <p id="username-regra" class="dica">De 3 a 20 caracteres: letras, números, ponto e
+          underline.</p>
         <form id="form-username" class="linha-form">
           <input id="username-input" type="text" minlength="3" maxlength="20"
-                 pattern="[a-zA-Z0-9_.]+" placeholder="ex.: joshazze" required
-                 aria-label="Username">
+                 pattern="[a-zA-Z0-9_.]{3,20}" placeholder="ex.: joshazze" required
+                 aria-label="Username" aria-describedby="username-regra"
+                 title="De 3 a 20 caracteres: letras, números, ponto e underline">
           <button class="botao-primario">Criar conta</button>
         </form>
-        <p class="vazio">Só letras, números, ponto e underline.</p>
+        <p id="username-erro" class="erro" role="alert" hidden></p>
       </div>
 
       <div id="conta-logado" hidden>
@@ -163,6 +173,8 @@
 
             <h2 class="secao">Minhas matérias</h2>
             <ol id="lista-materias" class="board"></ol>
+            <p id="materias-falha" class="falha" role="alert" hidden>Não deu pra carregar suas
+              matérias. Puxa a tela pra baixo ou recarrega a página.</p>
             <p id="materias-vazio" class="vazio" hidden>Você ainda não tem matéria nenhuma.
               Busque a disciplina na planilha e use o botão Adicionar com o dia da semana.</p>
             <button id="materias-cta" class="btn-menu primario" data-vai="buscar" hidden>Adicionar matérias</button>
@@ -195,7 +207,9 @@
 
         <div id="bloco-admin" hidden>
           <h2 class="secao">Admin · site</h2>
-          <button id="btn-trava" class="btn-menu">…</button>
+          <p id="admin-falha" class="falha" role="alert" hidden>O painel de admin não
+            respondeu.</p>
+          <button id="btn-trava" class="btn-menu" hidden>Travar o site</button>
 
           <div class="colunas">
             <div class="coluna">
