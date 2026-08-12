@@ -239,8 +239,51 @@ async function post(tabela: string, payload: unknown, onConflict: string, resolu
   if (!r.ok) throw new Error(`${tabela}: ${r.status} ${await r.text()}`)
 }
 
+/** Chave do `merge_key` gerado pelo banco (0001): md5 dos 6 campos, sem a sala.
+ *  Duas linhas da planilha iguais nesses 6 campos e diferentes só na sala fazem
+ *  o Postgres levantar 21000 ("ON CONFLICT DO UPDATE command cannot affect row a
+ *  second time"), e aí a rodada INTEIRA morre sem escrever nada. Como o
+ *  net.http_post do pg_cron é fire and forget, ninguém veria: só a pill de
+ *  frescor parando de andar. O v1 deduplicava no pandas (keep last) antes de
+ *  escrever, e o porte perdeu isso. */
+const chaveMerge = (l: any) =>
+  [l.categoria, l.turma, l.codigo, l.disciplina, l.horario, l.professor]
+    .map((v) => v ?? '').join('|')
+
+/** Apaga o que a planilha não tem mais. `mapa_dia` só crescia durante o dia:
+ *  como o merge_key inclui professor e horário, cada edição da planilha criava
+ *  linha nova e a velha só saía às 00:30. Em 12/08 eram 182 linhas no banco
+ *  contra 105 na planilha, e o efeito na tela era sala aparecendo ocupada com
+ *  ninguém dentro (26 pares sala/slot, 8 deles no 1º noite).
+ *
+ *  Só é seguro porque agora `capturado` vai no payload do upsert: sem isso o
+ *  merge do PostgREST não toca a coluna, linha viva mantém o timestamp do
+ *  primeiro avistamento, e o delete comeria dado bom. Escopo é sempre o dia
+ *  corrente. Rodada concorrente sobrevive: ela grava capturado maior que este. */
+async function apagarFantasmas(dia: string, inicio: string): Promise<number> {
+  const url = `${URL_BASE}/rest/v1/mapa_dia?select=id&data=eq.${dia}` +
+    `&capturado=lt.${encodeURIComponent(inicio)}`
+  const r = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      apikey: KEY,
+      Authorization: `Bearer ${KEY}`,
+      Prefer: 'return=representation',
+    },
+  })
+  if (!r.ok) throw new Error(`mapa_dia delete: ${r.status} ${await r.text()}`)
+  return ((await r.json()) as unknown[]).length
+}
+
 async function enviar(linhas: any[], rep: Repertorio, pendentes: Record<string, number>) {
-  await post('mapa_dia', linhas, 'data,merge_key', 'merge-duplicates')
+  const inicio = new Date().toISOString()
+
+  const porChave = new Map<string, any>()
+  for (const l of linhas) porChave.set(chaveMerge(l), l)   // keep last, como o v1
+  const unicas = [...porChave.values()].map((l) => ({ ...l, capturado: inicio }))
+
+  await post('mapa_dia', unicas, 'data,merge_key', 'merge-duplicates')
+  const apagadas = await apagarFantasmas(unicas[0].data, inicio)
 
   const disc = new Map<string, any>()
   for (const l of linhas) {
@@ -248,6 +291,9 @@ async function enviar(linhas: any[], rep: Repertorio, pendentes: Record<string, 
       disc.set(l.codigo, {
         codigo: l.codigo, turma: l.turma,
         disciplina: l.disciplina, professor: l.professor,
+        // sem isto a coluna se chama `atualizado` e guarda `criado`: o merge do
+        // PostgREST só toca coluna que está no payload
+        atualizado: inicio,
       })
     }
   }
@@ -255,20 +301,23 @@ async function enviar(linhas: any[], rep: Repertorio, pendentes: Record<string, 
     await post('disciplinas_historico', [...disc.values()], 'codigo', 'merge-duplicates')
   }
 
-  // o repertório manda: sala nova nasce no JSON, não no que a planilha cospe
+  // o repertório manda: sala nova nasce no JSON, não no que a planilha cospe.
+  // `merge-duplicates` e não `ignore`: com ignore, corrigir o prédio de uma sala
+  // no JSON nunca chegava no banco (a 0006 precisou de UPDATE à mão pra isso)
   await post('salas',
     Object.entries(rep.predio).map(([sala, predio]) => ({ sala, predio })),
-    'sala', 'ignore-duplicates')
+    'sala', 'merge-duplicates')
 
   // grafia fora do repertório espera revisão humana. visto_em entra no payload
   // porque sem ele a coluna guarda o primeiro avistamento pra sempre
   const alias = Object.entries(pendentes)
   if (alias.length) {
-    const agora = new Date().toISOString()
     await post('salas_pendentes',
-      alias.map(([a, n]) => ({ alias: a, ocorrencias: n, visto_em: agora })),
+      alias.map(([a, n]) => ({ alias: a, ocorrencias: n, visto_em: inicio })),
       'alias', 'merge-duplicates')
   }
+
+  return { apagadas, duplicadas: linhas.length - unicas.length }
 }
 
 /** Marca de frescor lida pelo front. net.http_post do pg_cron é fire and
@@ -318,7 +367,8 @@ Deno.serve(async (req) => {
     return Response.json({ ...resumo, dry: true, linhas_detalhe: linhas, disciplinas: disc.sort(), pendentes, multiplas })
   }
 
-  await enviar(linhas, rep, pendentes)
-  await marcarFrescor(resumo)
-  return Response.json({ ...resumo, pendentes, multiplas })
+  const escrita = await enviar(linhas, rep, pendentes)
+  const completo = { ...resumo, ...escrita }
+  await marcarFrescor(completo)
+  return Response.json({ ...completo, pendentes, multiplas })
 })
