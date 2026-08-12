@@ -332,7 +332,18 @@ main {
   overflow-wrap: anywhere;
 }
 
-.board .acoes { grid-area: acoes; display: flex; gap: 8px; padding-top: 8px; }
+.board .acoes {
+  grid-area: acoes;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+}
+
+/* no desktop as ações não precisam de uma faixa inteira embaixo da linha */
+@media (min-width: 1100px) {
+  .board .acoes { justify-content: flex-end; padding-top: 4px; }
+}
 
 .vazio { color: var(--text-muted); padding: 12px 4px; }
 
