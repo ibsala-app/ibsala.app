@@ -16,19 +16,22 @@
 # navegador, então quem tinha aberto o app nas últimas 4 horas continuava com o
 # app.js velho. `no-cache` não desliga o cache, obriga a revalidar: o 304 é
 # barato e o conserto chega na hora.
+# Medido em produção depois do primeiro deploy: regra de caminho EXATO pegou em
+# `/`, `/index.html` e `/manifest.json` e NÃO pegou em `/app.js`, `/style.css`,
+# `/config.js` e `/sw.js`, que continuaram com o `max-age=14400` do Pages.
+# Padrão com splat pega. Ordem importa: a última regra que casa é a que vale,
+# então `/vendor/*` vem depois de `/*.js` pra manter o bundle imutável.
 /
   Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
-/app.js
-  Cache-Control: no-cache
-/config.js
-  Cache-Control: no-cache
-/style.css
-  Cache-Control: no-cache
-/sw.js
-  Cache-Control: no-cache
 /manifest.json
+  Cache-Control: no-cache
+/*.js
+  Cache-Control: no-cache
+/*.css
+  Cache-Control: no-cache
+/*.html
   Cache-Control: no-cache
 
 # versionado ou imutável na prática: vale um ano
