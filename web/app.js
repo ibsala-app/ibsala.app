@@ -103,6 +103,16 @@ function intervaloCobreSlot(horario, s) {
   const f = faixaHoraria(horario)
   return !!f && f[0] <= s.fim && f[1] >= s.ini
 }
+// Lista de aula do dia é AGENDA: ordena por horário de início, e só desempata
+// por disciplina. Sem isto a ordem era a que o banco devolveu, então a aula das
+// 15:50 aparecia antes da de 09:50 na mesma busca.
+function porHorario(a, b) {
+  const ia = faixaHoraria(a.horario)?.[0] ?? Infinity
+  const ib = faixaHoraria(b.horario)?.[0] ?? Infinity
+  return ia - ib ||
+    String(a.disciplina ?? '').localeCompare(String(b.disciplina ?? ''), 'pt-BR')
+}
+
 function proximoSlot(min) {
   for (const [k, s] of Object.entries(SLOTS)) if (s.ini > min) return { k, ...s }
   return null
@@ -391,6 +401,7 @@ function pintarAgora() {
     vistos.add(k)
     rolando.push(r)
   }
+  rolando.sort(porHorario)
   $('board-agora').replaceChildren(...rolando.map((r) => li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
@@ -523,6 +534,7 @@ async function buscar(termo) {
     vistos.add(k)
     linhasHoje.push(r)
   }
+  linhasHoje.sort(porHorario)
   const codigosHoje = new Set(deHoje.map((r) => r.codigo).filter(Boolean))
 
   // 2) catálogo cobre quem não tem aula hoje (289 disciplinas contra 99 no mapa)
@@ -545,6 +557,7 @@ async function buscar(termo) {
     return
   }
   const semAulaHoje = (data ?? []).filter((r) => !codigosHoje.has(r.codigo))
+    .sort((a, b) => String(a.disciplina).localeCompare(String(b.disciplina), 'pt-BR'))
 
   const cards = [
     ...linhasHoje.map((r) => cardAula(r)),
