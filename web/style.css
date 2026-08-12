@@ -130,7 +130,7 @@ button, input, select, a {
 main {
   max-width: var(--col);
   margin: 0 auto;
-  padding: calc(20px + env(safe-area-inset-top)) 18px 28px;
+  padding: 20px 18px 28px;
 }
 
 /* header-card do v1: listra vertical azul→ouro + mark com bolinha dourada */
@@ -138,7 +138,10 @@ main {
   position: relative;
   display: block;
   max-width: calc(var(--col) - 36px);
-  margin: 18px auto 0;
+  /* o card vive FORA do <main>, então a safe area do iOS é problema dele: com
+     viewport-fit=cover o conteúdo sobe por baixo da barra de status e o relógio
+     do iPhone ficava escrito em cima da marca */
+  margin: calc(18px + env(safe-area-inset-top)) auto 0;
   background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -170,7 +173,9 @@ main {
 
 .marca img { border-radius: 7px; box-shadow: 0 2px 8px rgba(0,37,85,.18); }
 
-@media (max-width: 640px) { .topo { margin: 14px 18px 0; } }
+@media (max-width: 640px) {
+  .topo { margin: calc(14px + env(safe-area-inset-top)) 18px 0; }
+}
 
 .tela { display: none; }
 .tela.ativa { display: block; }
