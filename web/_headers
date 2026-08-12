@@ -9,6 +9,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
   Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cache-Control: no-cache
   Content-Security-Policy: default-src 'self'; script-src 'self' https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self'; font-src 'self'; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri https://o4511786471456768.ingest.us.sentry.io/api/4511786479386624/security/?sentry_key=3883535ebfb84453e132d81009942779
 
 # O Pages devolve `max-age=14400` por padrão. Com o service worker em rede
@@ -16,23 +17,11 @@
 # navegador, então quem tinha aberto o app nas últimas 4 horas continuava com o
 # app.js velho. `no-cache` não desliga o cache, obriga a revalidar: o 304 é
 # barato e o conserto chega na hora.
-# Medido em produção depois do primeiro deploy: regra de caminho EXATO pegou em
-# `/`, `/index.html` e `/manifest.json` e NÃO pegou em `/app.js`, `/style.css`,
-# `/config.js` e `/sw.js`, que continuaram com o `max-age=14400` do Pages.
-# Padrão com splat pega. Ordem importa: a última regra que casa é a que vale,
-# então `/vendor/*` vem depois de `/*.js` pra manter o bundle imutável.
-/
-  Cache-Control: no-cache
-/index.html
-  Cache-Control: no-cache
-/manifest.json
-  Cache-Control: no-cache
-/*.js
-  Cache-Control: no-cache
-/*.css
-  Cache-Control: no-cache
-/*.html
-  Cache-Control: no-cache
+# Duas tentativas medidas em produção antes desta: caminho EXATO (`/app.js`)
+# pegou em `/`, `/index.html` e `/manifest.json` mas NÃO em js e css, e o padrão
+# de extensão (`/*.js`) não pegou em nada. O que o Pages honra é splat de
+# DIRETÓRIO, e o bloco `/*` acima já vale pra tudo, então o `no-cache` mora lá e
+# as três pastas abaixo sobrescrevem com imutável.
 
 # versionado ou imutável na prática: vale um ano
 /fonts/*
