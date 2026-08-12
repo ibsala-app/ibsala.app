@@ -7,20 +7,18 @@
   <meta name="description" content="Consulta de salas e horários do Ibmec BH em tempo real.">
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#002555">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161c2c">
+  <meta name="apple-mobile-web-app-title" content="IBSALA">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://jbdmkbivmflauushiqca.supabase.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <!-- Inter self-hospedada: a CSP não tem 'unsafe-inline' em script-src, então o
+       truque do media="print" + onload nunca disparava e o site rodava na fonte
+       do sistema desde o começo -->
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
-  <!-- fonte fora do caminho crítico: pinta com fonte de sistema e troca quando chegar -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap"
-        rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap"
-          rel="stylesheet">
-  </noscript>
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -28,7 +26,7 @@
   <header class="topo">
     <div class="topo-linha">
       <div class="marca">
-        <img src="icons/icon-192.png" alt="" width="30" height="30">
+        <img src="icons/icon-192.png" alt="" width="30" height="30" decoding="async">
         <div>
           <span class="marca-nome">IBSALA</span>
           <span class="marca-sub">ibtech · salas em tempo real</span>
@@ -38,60 +36,95 @@
     <div class="pills">
       <span id="pill-data" class="pill pill-azul">—</span>
       <span id="pill-slot" class="pill">—</span>
+      <span id="pill-troca" class="pill pill-ouro" hidden></span>
       <span id="pill-livres" class="pill">—</span>
+      <span id="pill-frescor" class="pill pill-fraco" hidden></span>
     </div>
   </header>
 
+  <!-- trava do admin: agora bloqueia de verdade em vez de só trocar o rótulo do botão -->
+  <section id="bloqueio" class="bloqueio" hidden>
+    <div class="bloqueio-card">
+      <h2>IBSALA em manutenção</h2>
+      <p>A liga travou o site por alguns instantes pra ajustar o mapa de salas.
+        Tenta de novo em pouco tempo.</p>
+    </div>
+  </section>
+
   <main>
-    <!-- HOME (estrutura do v1: eyebrow + tagline + botões grandes) -->
+    <!-- HOME -->
     <section id="tela-home" class="tela ativa">
       <p class="eyebrow">Ibtech</p>
-      <p class="tagline">consulta de salas e horários em tempo real</p>
+      <h1 class="home-titulo" data-cabeca tabindex="-1">Salas do Ibmec BH, em tempo real</h1>
+      <p class="tagline">Veja onde é cada aula e quais salas estão livres agora, sem pedir conta
+        pra ninguém.</p>
 
       <nav class="menu">
-        <button class="btn-menu primario" data-vai="agora">Salas agora</button>
-        <button class="btn-menu" data-vai="buscar">Buscar disciplinas</button>
-        <button id="btn-menu-conta" class="btn-menu" data-vai="conta">Entrar</button>
+        <button class="btn-menu primario" data-vai="buscar">Planilha dinâmica</button>
+        <button class="btn-menu" data-vai="agora">Faculdade agora</button>
+        <button id="btn-menu-entrar" class="btn-menu" data-vai="conta" data-intencao="entrar">Entrar</button>
+        <button id="btn-menu-criar" class="btn-menu menor" data-vai="conta" data-intencao="criar">Criar conta</button>
       </nav>
 
       <a class="saiba" href="privacidade.html">Privacidade e sobre o IBSALA →</a>
     </section>
 
-    <!-- AGORA -->
+    <!-- FACULDADE AGORA -->
     <section id="tela-agora" class="tela">
       <button class="voltar" data-vai="home">← Voltar</button>
-      <div class="painel-cabeca">
-        <h1 id="livres-num">–</h1>
-        <p id="livres-rotulo">salas livres agora</p>
-        <div id="livres-grade" class="grade-salas"></div>
-      </div>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Faculdade agora</h1>
 
-      <h2 class="secao">Acontecendo agora</h2>
-      <ol id="board-agora" class="board"></ol>
-      <p id="agora-vazio" class="vazio" hidden>Nenhuma aula neste horário. O mapa do dia
-        chega às 5h em dia de aula.</p>
+      <div class="colunas colunas-agora">
+        <div class="coluna">
+          <div class="painel-cabeca" role="status" aria-live="polite">
+            <p class="hero-num" id="livres-num">–</p>
+            <p class="hero-rotulo" id="livres-rotulo">salas livres agora</p>
+            <div id="livres-grade" class="grade-salas"></div>
+          </div>
+
+          <p id="agora-falha" class="falha" hidden>Não deu pra carregar o mapa.
+            <button id="btn-retry" class="mini">Tentar de novo</button>
+          </p>
+        </div>
+
+        <div class="coluna">
+          <h2 class="secao">Acontecendo agora</h2>
+          <ol id="board-agora" class="board"></ol>
+          <p id="agora-vazio" class="vazio" hidden>Nenhuma aula neste horário. O mapa do dia
+            chega às 5h em dia de aula.</p>
+        </div>
+      </div>
     </section>
 
-    <!-- BUSCAR -->
+    <!-- PLANILHA DINÂMICA -->
     <section id="tela-buscar" class="tela">
       <button class="voltar" data-vai="home">← Voltar</button>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Planilha dinâmica</h1>
+
       <label class="busca-wrap">
-        <input id="busca-input" type="search" placeholder="Disciplina, professor ou código"
-               autocomplete="off">
+        <span class="rotulo-campo">Buscar na planilha da faculdade</span>
+        <input id="busca-input" type="search" placeholder="Disciplina, professor, código ou sala"
+               autocomplete="off" enterkeyhint="search">
       </label>
+      <p id="busca-dica" class="vazio">Digite duas letras pra começar. Quem tem aula hoje vem
+        primeiro, com sala e horário; o resto aparece como catálogo.</p>
       <ol id="busca-lista" class="board"></ol>
       <p id="busca-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
-        capturado do mapa oficial.</p>
+        capturado do mapa oficial, e sala e horário existem para as aulas de hoje.</p>
+      <p class="cta-suave">Com conta, o IBSALA manda a sala de cada aula sua no celular
+        ~50 min antes do horário. <button class="link-botao" data-vai="conta" data-intencao="criar">Criar conta</button></p>
     </section>
 
     <!-- CONTA -->
     <section id="tela-conta" class="tela">
       <button class="voltar" data-vai="home">← Voltar</button>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Sua conta</h1>
+
       <div id="conta-deslogado" hidden>
         <div class="painel-cabeca">
-          <h1 class="menor">Suas aulas, sua sala</h1>
-          <p>Entre pra ver onde é sua próxima aula e receber aviso de sala antes de cada
-            horário.</p>
+          <h2 class="painel-titulo" id="conta-titulo">Suas aulas, sua sala</h2>
+          <p id="conta-texto">Entre pra ver onde é sua próxima aula e receber aviso de sala antes
+            de cada horário.</p>
         </div>
         <button id="btn-login" class="btn-menu primario">Entrar com Google</button>
       </div>
@@ -100,50 +133,64 @@
         <h2 class="secao">Escolha seu username</h2>
         <form id="form-username" class="linha-form">
           <input id="username-input" type="text" minlength="3" maxlength="20"
-                 pattern="[a-zA-Z0-9_.]+" placeholder="ex.: joshazze" required>
+                 pattern="[a-zA-Z0-9_.]+" placeholder="ex.: joshazze" required
+                 aria-label="Username">
           <button class="botao-primario">Criar conta</button>
         </form>
         <p class="vazio">Só letras, números, ponto e underline.</p>
       </div>
 
       <div id="conta-logado" hidden>
-        <h2 class="secao">Hoje</h2>
-        <ol id="board-hoje" class="board"></ol>
-        <p id="hoje-vazio" class="vazio" hidden>Sem aulas suas no mapa de hoje.</p>
+        <div class="colunas">
+          <div class="coluna">
+            <h2 class="secao">Hoje</h2>
+            <ol id="board-hoje" class="board"></ol>
+            <p id="hoje-vazio" class="vazio" hidden>Sem aulas suas no mapa de hoje.</p>
 
-        <h2 class="secao">Minhas matérias</h2>
-        <ol id="lista-materias" class="board"></ol>
-        <p class="vazio">Pra adicionar, use a busca: cada resultado ganha um botão de
-          adicionar com o dia da semana.</p>
+            <h2 class="secao">Minhas matérias</h2>
+            <ol id="lista-materias" class="board"></ol>
+            <p id="materias-vazio" class="vazio" hidden>Você ainda não tem matéria nenhuma.
+              Abra a Planilha dinâmica, busque a disciplina e use o botão Adicionar com o dia
+              da semana.</p>
+          </div>
 
-        <h2 class="secao">Avisos de sala</h2>
-        <button id="btn-push" class="btn-menu">Ativar avisos neste aparelho</button>
-        <p class="vazio">Você recebe a sala de cada aula ~50 minutos antes do horário.</p>
+          <div class="coluna">
+            <h2 class="secao">Avisos de sala</h2>
+            <button id="btn-push" class="btn-menu">Ativar avisos neste aparelho</button>
+            <p id="push-dica" class="vazio">Você recebe a sala de cada aula ~50 minutos antes
+              do horário.</p>
 
-        <h2 class="secao">Reportar problema</h2>
-        <form id="form-reclamacao" class="linha-form">
-          <input id="reclamacao-input" type="text" maxlength="500"
-                 placeholder="Descreva o problema" required>
-          <button class="botao-primario">Enviar</button>
-        </form>
+            <h2 class="secao">Reportar problema</h2>
+            <form id="form-reclamacao" class="linha-form">
+              <input id="reclamacao-input" type="text" maxlength="500"
+                     placeholder="Descreva o problema" required aria-label="Descrição do problema">
+              <button class="botao-primario">Enviar</button>
+            </form>
 
-        <h2 class="secao">Seus dados</h2>
-        <div class="acoes-conta">
-          <button id="btn-export" class="botao-raso">Exportar meus dados</button>
-          <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
-          <button id="btn-sair" class="botao-raso">Sair da conta</button>
+            <h2 class="secao">Seus dados</h2>
+            <div class="acoes-conta">
+              <button id="btn-export" class="botao-raso">Exportar meus dados</button>
+              <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
+              <button id="btn-sair" class="botao-raso">Sair da conta</button>
+            </div>
+          </div>
         </div>
 
         <div id="bloco-admin" hidden>
           <h2 class="secao">Admin · site</h2>
           <button id="btn-trava" class="btn-menu">…</button>
 
-          <h2 class="secao">Admin · reclamações</h2>
-          <ol id="admin-reclamacoes" class="board"></ol>
-          <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
-
-          <h2 class="secao">Admin · alunos</h2>
-          <ol id="admin-alunos" class="board"></ol>
+          <div class="colunas">
+            <div class="coluna">
+              <h2 class="secao">Admin · reclamações</h2>
+              <ol id="admin-reclamacoes" class="board"></ol>
+              <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
+            </div>
+            <div class="coluna">
+              <h2 class="secao">Admin · alunos</h2>
+              <ol id="admin-alunos" class="board"></ol>
+            </div>
+          </div>
         </div>
       </div>
     </section>
