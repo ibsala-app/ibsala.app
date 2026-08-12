@@ -29,6 +29,7 @@
 }
 
 :root {
+  color-scheme: light;
   --bg: #f7faff;
   --bg2: #eef3fb;
   --bg3: #e3ebf6;
@@ -66,6 +67,7 @@
   /* escala tipográfica: sete passos, no lugar dos onze literais espalhados */
   --t-xs: 12.5px;
   --t-sm: 13.5px;
+  --t-sm2: 14px;
   --t-md: 15px;
   --t-lg: 17px;
   --t-xl: 20px;
@@ -78,6 +80,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #0b0f17;
     --bg2: #141a28;
     --bg3: #1c2436;
@@ -272,6 +275,17 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+/* `.secao` é rótulo de agrupamento (12,5px, uppercase, muted). Ele estava
+   encabeçando instrução de verdade, tipo "Escolha seu username", e ficava MENOR
+   e mais apagado que o parágrafo abaixo: heading que perde do corpo. */
+.secao-forte {
+  display: block;
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--text);
+  padding: 22px 4px 4px;
+}
+
 .secao {
   font-size: var(--t-xs);
   font-weight: 800;
@@ -453,7 +467,7 @@ input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible
 
 .botao-raso {
   margin-top: 22px;
-  font-size: 14px;
+  font-size: var(--t-sm2);
   color: var(--text-dim);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -505,7 +519,7 @@ select.mini { padding-right: 8px; }
 }
 
 .btn-menu.menor {
-  font-size: 14px;
+  font-size: var(--t-sm2);
   font-weight: 600;
   padding: 11px 18px;
   color: var(--text-dim);
@@ -588,15 +602,25 @@ button:disabled {
 .saiba {
   display: inline-block;
   margin-top: 26px;
-  color: var(--text-dim);
-  font-size: 14px;
+  color: var(--blue-2);
+  font-size: var(--t-sm2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* link DENTRO de frase: sem margem, sem virar bloco. O `.saiba` é o link
+   avulso de fim de tela, e usar ele no meio de um parágrafo quebrava a linha */
+.link {
+  color: var(--blue-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .cta-suave {
   margin-top: 22px;
   padding: 14px 16px;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: var(--t-sm2);
   background: var(--bg2);
   border: 1px dashed var(--border);
   border-radius: var(--r-md);
@@ -605,7 +629,7 @@ button:disabled {
 .voltar {
   margin-top: 14px;
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--t-sm2);
   font-weight: 600;
   color: var(--text-dim);
   background: none;
@@ -852,3 +876,76 @@ body.bloqueado .rodape { display: none; }
   .board li { padding: 10px 16px; }
   .hero-num { font-size: 52px; }
 }
+
+
+/* ── Cadastro: passos e aceite ───────────────────────────────────────────── */
+
+.passos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  list-style: none;
+  padding: 14px 0 2px;
+  margin: 0;
+}
+.passos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.passo-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.passos .atual { color: var(--text); }
+.passos .atual .passo-num {
+  color: var(--sobre-ouro);
+  background: var(--gold);
+  border-color: var(--gold-dim);
+}
+.passos .feito { color: var(--text-dim); }
+.passos .feito .passo-num {
+  color: var(--sobre-azul);
+  background: var(--blue-2);
+  border-color: var(--blue-2);
+}
+
+.linha-aceite {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0 4px;
+  font-size: var(--t-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.caixa {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  accent-color: var(--gold);
+}
+.linha-aceite span { padding-top: 1px; line-height: 1.5; }
+.linha-aceite .link { white-space: nowrap; }
+
+#btn-cancelar-cadastro { margin-top: 10px; }
+
+.rodape-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  padding-top: 20px;
+}
+.fim-pagina { padding-top: 24px; }

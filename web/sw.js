@@ -1,6 +1,7 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-15'
+const CACHE = 'ibsala-v5-16'
 const SHELL = ['/', '/style.css', '/app.js', '/config.js', '/manifest.json',
+  '/privacidade.html', '/termos.html',
   '/vendor/supabase.min.js',
   '/fonts/inter-latin.woff2', '/fonts/inter-latin-ext.woff2',
   '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.svg']
@@ -21,7 +22,8 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return
   // navegação e API: rede primeiro; estático: cache primeiro
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).catch(() => caches.match('/')))
+    e.respondWith(fetch(e.request)
+      .catch(async () => (await caches.match(e.request)) || (await caches.match('/'))))
     return
   }
   // REDE PRIMEIRO, cache de reserva. Era cache-primeiro, e isso custou caro:

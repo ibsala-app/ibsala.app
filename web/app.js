@@ -63,6 +63,8 @@ const SLOTS = {
 const DIAS = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
 const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO']
 const TELAS = ['home', 'agora', 'buscar', 'conta']
+// muda junto com o texto de termos.html; é o que fica gravado em alunos
+const TERMOS_VERSAO = '1-2026-08-12'
 
 function agoraBRT() {
   // o parse de "8/12/2026, 3:04:05 PM" depende do motor; se falhar, o relógio
@@ -582,9 +584,24 @@ function aplicarIntencao(qual) {
   $('btn-login').textContent = criando ? 'Criar conta com Google' : 'Entrar com Google'
 }
 
+// Passo 1 é entrar, 2 é escolher username, 3 é ter pelo menos uma matéria.
+// Some quando o cadastro termina, pra não virar enfeite permanente.
+function pintarPassos() {
+  const passo = !sessao ? 1 : (!perfil ? 2 : (minhas.length ? 0 : 3))
+  $('passos').hidden = passo === 0
+  for (const li of $('passos').children) {
+    const n = Number(li.dataset.passo)
+    li.classList.toggle('feito', n < passo)
+    li.classList.toggle('atual', n === passo)
+    if (n === passo) li.setAttribute('aria-current', 'step')
+    else li.removeAttribute('aria-current')
+  }
+}
+
 function mostrarConta() {
   const logado = !!(sessao && perfil)
   const cadastrando = !!(sessao && !perfil && !perfilDesconhecido)
+  pintarPassos()
   $('cta-conta').hidden = logado         // logado não precisa ver "Criar conta"
   $('materias-cta').hidden = !logado
   $('conta-deslogado').hidden = !!sessao
@@ -914,12 +931,23 @@ $('btn-sair').addEventListener('click', (ev) => ocupado(ev.currentTarget, async 
 $('btn-conta-retry').addEventListener('click', (ev) =>
   ocupado(ev.currentTarget, () => carregarPerfil()))
 
+$('btn-cancelar-cadastro').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+  await sb.auth.signOut().catch(() => sb.auth.signOut({ scope: 'local' }))
+  mostrar('home')
+  toast('Cadastro cancelado.')
+}))
+
 $('form-username').addEventListener('submit', (e) => {
   e.preventDefault()
   const btn = e.target.querySelector('button')
   return ocupado(btn, async () => {
     const u = $('username-input').value.trim()
     mostrarErroUsername('')
+    if (!$('chk-termos').checked) {
+      mostrarErroUsername('Pra criar a conta você precisa aceitar os termos e a política.')
+      $('chk-termos').focus()
+      return
+    }
 
     const { data: livre, error: eChecagem } = await chamar(
       sb.rpc('username_disponivel', { candidato: u }))
@@ -931,14 +959,19 @@ $('form-username').addEventListener('submit', (e) => {
 
     const { error } = await chamar(sb.from('alunos').insert({
       id: sessao.user.id, username: u, email: sessao.user.email,
+      // prova do aceite: data e versão, não só um checkbox que sumiu da tela
+      termos_em: new Date().toISOString(), termos_versao: TERMOS_VERSAO,
     }))
     if (error) {
       mostrarErroUsername(error.tipo === 'duplicado'
         ? 'Esse username já existe. Tenta outro.' : error.msg)
       return
     }
-    toast(`Bem-vindo/a, ${u}!`)
-    carregarPerfil()
+    toast(`Bem-vindo/a, ${u}! Agora monte sua grade.`)
+    await carregarPerfil()
+    // passo 3 é onde o app começa a servir pra alguma coisa; sem empurrão, 7
+    // dos 17 cadastrados pararam exatamente aqui
+    if (!minhas.length) mostrar('buscar')
   })
 })
 
@@ -997,6 +1030,7 @@ async function carregarMinhas() {
     return el
   }))
   $('materias-vazio').hidden = minhas.length > 0
+  pintarPassos()
   pintarHoje()
 }
 
