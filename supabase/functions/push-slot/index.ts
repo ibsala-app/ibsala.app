@@ -6,15 +6,7 @@
 
 import webpush from 'npm:web-push@3.6.7'
 import { segredoConfere } from '../_shared/cron.ts'
-
-const SLOTS: Record<string, [number, number]> = {
-  manha1: [6 * 60, 9 * 60 + 29],
-  manha2: [9 * 60 + 30, 12 * 60 + 59],
-  tarde1: [13 * 60, 15 * 60 + 29],
-  tarde2: [15 * 60 + 30, 17 * 60 + 59],
-  noite1: [18 * 60, 18 * 60 + 59],
-  noite2: [19 * 60, 23 * 60 + 59],
-}
+import { hojeBRT, SLOTS, slotDoInicio } from '../_shared/slots.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -39,22 +31,6 @@ async function rest(path: string, init: RequestInit = {}) {
   return r.status === 204 ? null : r.json()
 }
 
-function hojeBRT() {
-  const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-  return {
-    iso: agora.toLocaleDateString('sv-SE'),
-    diaSemana: agora.getDay(), // 1=SEG … 6=SAB (materias.dia)
-  }
-}
-
-function slotDoHorario(h: string): string | null {
-  const m = /^(\d{1,2}):(\d{2})/.exec(String(h ?? '').split('/')[0]?.trim() ?? '')
-  if (!m) return null
-  const min = +m[1] * 60 + +m[2]
-  for (const [k, [a, b]] of Object.entries(SLOTS)) if (min >= a && min <= b) return k
-  return null
-}
-
 Deno.serve(async (req) => {
   if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const { slot } = await req.json().catch(() => ({}))
@@ -62,11 +38,20 @@ Deno.serve(async (req) => {
 
   const { iso, diaSemana } = hojeBRT()
 
+  // `sala_canon` e não `sala`: o rótulo cru da planilha ia inteiro pro título da
+  // notificação ("Sala 207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)"), e pseudo-sala
+  // como CANCELADA e ONLINE, que tem canônica nula de propósito justamente pra
+  // não ocupar nada, chegava no aluno como "Sala CANCELADA".
+  // `order=capturado.desc` porque sem ordem o PostgREST devolve na ordem física,
+  // que muda a cada UPDATE: o dedupe por código guardava uma linha por sorteio e
+  // podia mandar o aluno pra sala ANTIGA.
   const mapa: any[] = await rest(
-    `mapa_dia?data=eq.${iso}&select=codigo,disciplina,horario,professor,sala`)
-  const doSlot = mapa.filter((r) => r.codigo && r.sala && slotDoHorario(r.horario) === slot)
+    `mapa_dia?data=eq.${iso}&order=capturado.desc` +
+    `&select=codigo,disciplina,horario,professor,sala_canon`)
+  const doSlot = mapa.filter((r) => r.codigo && r.sala_canon && slotDoInicio(r.horario) === slot)
   if (!doSlot.length) return Response.json({ enviados: 0, motivo: 'mapa vazio no slot' })
-  const porCodigo = new Map(doSlot.map((r) => [r.codigo, r]))
+  const porCodigo = new Map<string, any>()
+  for (const r of doSlot) if (!porCodigo.has(r.codigo)) porCodigo.set(r.codigo, r)
 
   const materias: any[] = await rest(
     `materias?dia=eq.${diaSemana}&select=aluno_id,codigo,disciplina,` +
@@ -86,9 +71,11 @@ Deno.serve(async (req) => {
     `&select=endpoint,p256dh,auth,aluno_id`)
 
   let enviados = 0
+  let limpas = 0
+  let falhas = 0
   await Promise.all(subs.map(async (s) => {
     const aulas = porAluno.get(s.aluno_id)!
-    const salas = [...new Set(aulas.map((a) => a.sala))]
+    const salas = [...new Set(aulas.map((a) => a.sala_canon))]
     const titulo = salas.length === 1 ? `Sala ${salas[0]}` : `Salas ${salas.join(', ')}`
     const corpo = aulas.map((a) =>
       `${a.disciplina} · ${(a.professor || '').split(' ')[0]} · ${a.horario}`).join('\n')
@@ -99,12 +86,30 @@ Deno.serve(async (req) => {
       )
       enviados++
     } catch (e: any) {
+      // inscrição morta: limpa. O DELETE dentro de um Promise.all sem catch
+      // derrubava a resposta inteira DEPOIS dos pushes já terem saído
       if (e?.statusCode === 404 || e?.statusCode === 410) {
-        await rest(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`,
-          { method: 'DELETE' })
+        try {
+          await rest(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`,
+            { method: 'DELETE' })
+          limpas++
+        } catch { /* some na próxima rodada */ }
+      } else {
+        falhas++
       }
     }
   }))
 
-  return Response.json({ enviados, alunos: porAluno.size, subs: subs.length })
+  // o pg_cron ignora a resposta (net.http_post é fire and forget), então o
+  // resultado fica no banco, como a captura já faz com a marca de frescor
+  await rest('config?on_conflict=key', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify([{
+      key: 'ultimo_push',
+      value: { em: new Date().toISOString(), slot, enviados, falhas, limpas, alunos: porAluno.size },
+    }]),
+  }).catch(() => {})
+
+  return Response.json({ enviados, falhas, limpas, alunos: porAluno.size, subs: subs.length })
 })
