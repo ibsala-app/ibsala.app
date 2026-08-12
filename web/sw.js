@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-16'
+const CACHE = 'ibsala-v5-17'
 const SHELL = ['/', '/style.css', '/app.js', '/config.js', '/manifest.json',
   '/privacidade.html', '/termos.html',
   '/vendor/supabase.min.js',
@@ -17,6 +17,17 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim()))
 })
 
+// O Cloudflare Pages NÃO deixa o `_headers` sobrescrever Cache-Control em js e
+// css da RAIZ: medido três vezes em produção (caminho exato, padrão de extensão
+// e bloco `/*`), sempre volta `max-age=14400`. Dentro de pasta ele obedece, por
+// isso fonte, vendor e ícones ficam imutáveis de um ano. Como `fetch` do worker
+// passa pelo cache HTTP do navegador, sem isto um deploy continuaria levando até
+// 4 HORAS pra chegar em quem já tinha aberto o app, que é a mesma classe de
+// problema que gerou três "não consertou" em 12/08. `cache: 'reload'` pula o
+// cache HTTP só nestes três arquivos, que somam ~57KB; o bundle de 207KB e as
+// fontes continuam vindo do cache do navegador.
+const SEMPRE_FRESCO = new Set(['/app.js', '/style.css', '/config.js'])
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
   if (e.request.method !== 'GET' || url.origin !== location.origin) return
@@ -32,8 +43,12 @@ self.addEventListener('fetch', (e) => {
   // (aconteceu três vezes em 12/08: barra de status, alinhamento das colunas e
   // botão colado). O arquivo versionado (fonte, bundle) tem Cache-Control
   // immutable, então o cache HTTP do navegador segura o tráfego de qualquer jeito.
+  const pedido = SEMPRE_FRESCO.has(url.pathname)
+    ? new Request(e.request, { cache: 'reload' })
+    : e.request
+
   e.respondWith(
-    fetch(e.request).then((resp) => {
+    fetch(pedido).then((resp) => {
       if (resp.ok) {
         const clone = resp.clone()
         caches.open(CACHE).then((c) => c.put(e.request, clone))
