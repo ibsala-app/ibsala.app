@@ -206,6 +206,10 @@ main {
 .painel-titulo { font-size: var(--t-xl); font-weight: 800; }
 
 /* hero de salas livres: card destacado, número grande navy, contagem no ouro */
+/* quando vem depois do rótulo de seção, o espaçamento é o do rótulo (8px), e é
+   isso que faz o card da esquerda alinhar com o board da direita no desktop */
+.secao + .painel-cabeca { margin-top: 0; }
+
 .painel-cabeca {
   background: var(--surface);
   border: 1px solid var(--border);
