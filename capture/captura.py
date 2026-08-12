@@ -16,8 +16,12 @@ import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# o repertório mora dentro de supabase/functions/_shared/ porque o bundle da
+# edge function não alcança a raiz do repo, e uma cópia só é a regra: dois
+# arquivos iguais divergem no primeiro conserto
 REPERTORIO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               os.pardir, "salas-repertorio.json")
+                               os.pardir, "supabase", "functions", "_shared",
+                               "salas-repertorio.json")
 
 SPREADSHEET_ID = "1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"

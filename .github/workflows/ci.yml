@@ -17,6 +17,18 @@ jobs:
       - run: pip install pytest
       - run: python -m pytest capture/ -q
 
+  contraste:
+    # o dark mode já entregou texto branco sobre azul claro a 3,4:1 (a pill de
+    # data) e o eyebrow dourado a 2,40:1 no tema claro; olho nu não pega isso
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/contraste.py
+
   gitleaks:
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -1,14 +1,21 @@
 name: captura
 
+# O AGENDAMENTO SAIU DAQUI em 12/08/2026: quem dispara a captura agora é o
+# pg_cron do Supabase (migration 0008), chamando a edge function `captura`.
+#
+# Motivo: o schedule do GitHub pedia ~48 execuções por dia e entregava 6 a 10.
+# Medido em 100 runs entre 23/07 e 12/08 (3 em 12/08, 8 em 11/08, 6 em 10/08,
+# 10 em 07/08), todos verdes em 15s com "upsert ok": throttle do lado do GitHub,
+# não falha do job. Como `mapa_dia` guarda só o dia corrente, atraso da primeira
+# captura = app mostrando salas livres demais e nenhuma aula (em 11/08, das 00:30
+# às 07:37 BRT).
+#
+# Este workflow fica como PLANO B manual: dispara na mão pelo Actions se a
+# function ou o pg_cron estiverem fora. `capture/captura.py` segue sendo a
+# implementação de referência do parser, e o portão de paridade
+# (scripts/paridade-captura.py) exige que os dois devolvam o mesmo payload.
 on:
   workflow_dispatch:
-  schedule:
-    # Espelha o v1 (BRT = UTC-3, dias úteis): a cada 20 min 07:00-21:40,
-    # + 22:00, + captura matinal 05:00.
-    - cron: "0,20,40 10-23 * * 1-5"   # 07:00-20:40 BRT seg-sex
-    - cron: "0,20,40 0 * * 2-6"       # 21:00-21:40 BRT seg-sex
-    - cron: "0 1 * * 2-6"             # 22:00 BRT seg-sex
-    - cron: "0 8 * * 1-5"             # 05:00 BRT seg-sex
 
 concurrency:
   group: captura
