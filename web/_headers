@@ -8,7 +8,33 @@
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri https://o4511786471456768.ingest.us.sentry.io/api/4511786479386624/security/?sentry_key=3883535ebfb84453e132d81009942779
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self'; font-src 'self'; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri https://o4511786471456768.ingest.us.sentry.io/api/4511786479386624/security/?sentry_key=3883535ebfb84453e132d81009942779
 
+# O Pages devolve `max-age=14400` por padrão. Com o service worker em rede
+# primeiro isso ainda escondia deploy: o `fetch` dele passa pelo cache HTTP do
+# navegador, então quem tinha aberto o app nas últimas 4 horas continuava com o
+# app.js velho. `no-cache` não desliga o cache, obriga a revalidar: o 304 é
+# barato e o conserto chega na hora.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/app.js
+  Cache-Control: no-cache
+/config.js
+  Cache-Control: no-cache
+/style.css
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/manifest.json
+  Cache-Control: no-cache
+
+# versionado ou imutável na prática: vale um ano
 /fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+/icons/*
   Cache-Control: public, max-age=31536000, immutable

@@ -7,14 +7,31 @@
        instalada, com o relogio escrito em cima da marca. Sem ele o iOS reserva a
        faixa e pinta ela com o theme-color. -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IBSALA</title>
+  <title>IBSALA · salas do Ibmec BH em tempo real</title>
   <meta name="description" content="Consulta de salas e horários do Ibmec BH em tempo real.">
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7faff">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f17">
   <meta name="apple-mobile-web-app-title" content="IBSALA">
+  <!-- iOS abaixo do 16.4 não lê `display: standalone` do manifest -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+
+  <!-- o app é distribuído por QR code e link colado no WhatsApp, e sem isto o
+       link chegava como texto puro, sem título, sem descrição e sem imagem -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="IBSALA">
+  <meta property="og:url" content="https://ibsala.com.br/">
+  <meta property="og:title" content="IBSALA · sua sala no Ibmec BH, agora">
+  <meta property="og:description" content="Veja onde é cada aula e quais salas estão livres agora, sem se perder na planilha.">
+  <meta property="og:image" content="https://ibsala.com.br/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="pt_BR">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://jbdmkbivmflauushiqca.supabase.co">
   <!-- Inter self-hospedada: a CSP não tem 'unsafe-inline' em script-src, então o
        truque do media="print" + onload nunca disparava e o site rodava na fonte
@@ -35,7 +52,7 @@
         <img src="icons/icon-192.png" alt="" width="30" height="30" decoding="async">
         <div>
           <span class="marca-nome">IBSALA</span>
-          <span class="marca-sub">ibtech · salas em tempo real</span>
+          <span class="marca-sub">IBtech · salas em tempo real</span>
         </div>
       </div>
     </div>
@@ -51,8 +68,8 @@
 
   <!-- trava do admin: agora bloqueia de verdade em vez de só trocar o rótulo do botão -->
   <section id="bloqueio" class="bloqueio" hidden>
-    <div class="bloqueio-card">
-      <h2>IBSALA em manutenção</h2>
+    <div class="bloqueio-card" tabindex="-1">
+      <h1>IBSALA em manutenção</h1>
       <p>A liga travou o site por alguns instantes pra ajustar o mapa de salas.
         Tenta de novo em pouco tempo.</p>
     </div>
@@ -61,7 +78,7 @@
   <main>
     <!-- HOME -->
     <section id="tela-home" class="tela ativa">
-      <p class="eyebrow">Ibtech</p>
+      <p class="eyebrow">IBtech</p>
       <h1 class="home-titulo" data-cabeca tabindex="-1">Salas do Ibmec BH, em tempo real</h1>
       <p class="tagline">Veja onde é cada aula e quais salas estão livres agora, sem se perder
         na planilha.</p>
@@ -87,10 +104,13 @@
       <div class="colunas colunas-agora">
         <div class="coluna">
           <h2 class="secao">Salas livres</h2>
-          <div class="painel-cabeca" role="status" aria-live="polite">
-            <p class="hero-num" id="livres-num">–</p>
-            <p class="hero-rotulo" id="livres-rotulo">salas livres agora</p>
-            <div id="livres-grade" class="grade-salas"></div>
+          <div class="painel-cabeca">
+            <div role="status" aria-live="polite">
+              <p class="hero-num" id="livres-num" aria-label="contando salas livres">–</p>
+              <p class="hero-rotulo" id="livres-rotulo">salas livres agora</p>
+            </div>
+            <div id="livres-grade" class="grade-salas" aria-live="off"></div>
+            <p id="livres-vazio" class="vazio" hidden>Nenhuma sala livre neste turno.</p>
           </div>
 
           <p id="agora-falha" class="falha" role="alert" hidden>Não deu pra carregar o mapa de hoje.
@@ -128,6 +148,7 @@
       <p id="busca-falha" class="falha" role="alert" hidden>A busca não respondeu.
         <button id="btn-busca-retry" class="mini">Tentar de novo</button>
       </p>
+      <p id="busca-status" role="status" class="so-leitor"></p>
       <ol id="busca-lista" class="board"></ol>
       <p id="busca-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
         capturado do mapa oficial, e sala e horário existem para as aulas de hoje.</p>
@@ -322,6 +343,11 @@
   <footer class="rodape">
     <p>© 2026 Joshua Azze &amp; IBtech · Todos os direitos reservados.</p>
   </footer>
+
+  <noscript>
+    <p class="falha">O IBSALA precisa de JavaScript pra ler o mapa de salas da faculdade.
+      Habilite e recarregue a página.</p>
+  </noscript>
 
   <div id="toast" role="status"></div>
   <script type="module" src="app.js"></script>
