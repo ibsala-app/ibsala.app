@@ -1,6 +1,32 @@
-/* ibsala v2 — estrutura do v1 repaginada.
+/* ibsala v5 — estrutura do v1 repaginada.
    DNA herdado: fundo claro azulado, cards brancos, navy #002555 + ouro #F5AC00,
    Inter, filete dourado no topo, header-card com listra azul→ouro. */
+
+/* Inter self-hospedada (SIL OFL 1.1, licença em fonts/OFL.txt). Um arquivo
+   variável por subset: o navegador só baixa latin-ext se precisar de glifo dele.
+   Antes vinha do fonts.googleapis.com por um <link media="print" onload=...>,
+   e a CSP sem 'unsafe-inline' em script-src matava o onload: a Inter nunca
+   entrava e o site inteiro rodava na fonte do sistema. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/inter-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/inter-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   --bg: #f7faff;
@@ -19,11 +45,30 @@
   --text: #0b1220;
   --text-dim: #475168;
   --text-muted: #62708c;
+  --sobre-ouro: #241a00;      /* texto que fica em cima do ouro, nos dois temas */
+  --sobre-azul: #ffffff;      /* texto que fica em cima do azul da pill */
+  /* ouro como COR DE TEXTO em fundo claro: o #d89700 dava 2,40:1 no eyebrow,
+     que é 12,5px e portanto texto normal pra WCAG */
+  --gold-texto: #8a6100;
+  --hover: #f2f6fd;
+  --press: #e6ecf8;
   --shadow-sm: 0 1px 2px rgba(0,37,85,.05);
   --shadow-md: 0 4px 16px rgba(0,37,85,.08), 0 1px 3px rgba(0,37,85,.05);
   --r-md: 10px;
   --r-lg: 14px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* escala tipográfica: sete passos, no lugar dos onze literais espalhados */
+  --t-xs: 12.5px;
+  --t-sm: 13.5px;
+  --t-md: 15px;
+  --t-lg: 17px;
+  --t-xl: 20px;
+  --t-2xl: 26px;
+  --t-hero: 56px;
+
+  --col: 640px;               /* largura da coluna de conteúdo, por breakpoint */
+  --gap-col: 0px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,12 +89,23 @@
     --text: #e8edf8;
     --text-dim: #a8b4d0;
     --text-muted: #8896c0; /* sólido; nunca opacity em texto */
+    /* no dark o azul da pill clareia, então texto branco cai pra ~3,4:1:
+       inverte pra texto escuro e volta pra ~5,4:1 */
+    --sobre-azul: #0b1220;
+    --gold-texto: #d89700;
+    --hover: #1d2436;
+    --press: #232c42;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
     --shadow-md: 0 4px 16px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.35);
   }
 }
 
 * { box-sizing: border-box; margin: 0; }
+
+/* qualquer `display` de autor vence o `display:none` que o atributo hidden
+   traz da folha do navegador, e foi assim que o aviso de falha apareceu com o
+   mapa carregado direitinho */
+[hidden] { display: none !important; }
 
 html { height: 100%; }
 
@@ -58,15 +114,21 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 15px;
+  font-size: var(--t-md);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   /* o filete dourado do v1 */
   border-top: 3px solid var(--gold);
-  }
+}
+
+button, input, select, a {
+  /* mata o atraso de 300ms do toque e o realce cinza padrão do mobile */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(245,172,0,.22);
+}
 
 main {
-  max-width: 640px;
+  max-width: var(--col);
   margin: 0 auto;
   padding: calc(20px + env(safe-area-inset-top)) 18px 28px;
 }
@@ -75,7 +137,7 @@ main {
 .topo {
   position: relative;
   display: block;
-  max-width: 604px;
+  max-width: calc(var(--col) - 36px);
   margin: 18px auto 0;
   background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
   border: 1px solid var(--border);
@@ -97,22 +159,46 @@ main {
 
 .marca-nome {
   display: block;
-  font-size: 19px;
+  font-size: var(--t-xl);
   font-weight: 900;
   letter-spacing: 1.2px;
   color: var(--blue);
   line-height: 1.2;
 }
 
-.marca-sub { display: block; font-size: 12.5px; color: var(--text-muted); }
+.marca-sub { display: block; font-size: var(--t-xs); color: var(--text-muted); }
 
 .marca img { border-radius: 7px; box-shadow: 0 2px 8px rgba(0,37,85,.18); }
-
 
 @media (max-width: 640px) { .topo { margin: 14px 18px 0; } }
 
 .tela { display: none; }
 .tela.ativa { display: block; }
+
+/* ── títulos ───────────────────────────────────────────────────────────────── */
+.home-titulo {
+  font-size: var(--t-2xl);
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -.4px;
+  padding-top: 4px;
+  color: var(--text);
+}
+
+.tela-titulo {
+  font-size: var(--t-2xl);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -.3px;
+  padding-top: 6px;
+}
+
+/* o título recebe foco por programa quando a tela troca, pra o leitor de tela
+   acompanhar; anel não entra porque título não é controle operável, e o anel
+   aparecia como uma caixa dourada em volta do h1 a cada navegação */
+[data-cabeca]:focus, [data-cabeca]:focus-visible { outline: none; }
+
+.painel-titulo { font-size: var(--t-xl); font-weight: 800; }
 
 /* hero de salas livres: card destacado, número grande navy, contagem no ouro */
 .painel-cabeca {
@@ -124,36 +210,49 @@ main {
   margin-top: 16px;
 }
 
-.painel-cabeca h1 {
-  font-size: 56px;
+.hero-num {
+  font-size: var(--t-hero);
   line-height: 1.05;
   font-weight: 900;
+  letter-spacing: -2px;
   color: var(--blue);
+  font-variant-numeric: tabular-nums;
 }
 
-.painel-cabeca h1.menor { font-size: 26px; }
-
-.painel-cabeca p { color: var(--text-dim); margin-top: 2px; }
+.hero-rotulo { color: var(--text-dim); margin-top: 2px; }
 
 .grade-salas {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   padding: 14px 0 2px;
 }
 
+.grupo-rotulo {
+  width: 100%;
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  color: var(--text-muted);
+  padding-top: 6px;
+}
+
+.grupo-rotulo:first-child { padding-top: 0; }
+
 .sala-chip {
-  font-size: 13.5px;
+  font-size: var(--t-sm);
   font-weight: 600;
   padding: 5px 12px;
   color: var(--text);
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 999px;
+  font-variant-numeric: tabular-nums;
 }
 
 .secao {
-  font-size: 12.5px;
+  font-size: var(--t-xs);
   font-weight: 800;
   letter-spacing: 1.8px;
   text-transform: uppercase;
@@ -190,29 +289,65 @@ main {
 .board .sala {
   grid-area: sala;
   align-self: center;
-  font-size: 17px;
+  font-size: var(--t-lg);
   font-weight: 800;
   color: var(--blue);
   background: var(--gold-soft);
   border-radius: var(--r-md);
   padding: 6px 12px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* sem sala conhecida: não finge destaque de sala */
+.board .sala-vazia {
+  color: var(--text-dim);
+  background: var(--bg2);
+  font-weight: 700;
 }
 
 .board .disc { grid-area: disc; font-weight: 600; overflow-wrap: anywhere; }
 
-.board .meta { grid-area: meta; color: var(--text-muted); font-size: 13.5px; overflow-wrap: anywhere; }
+.board .meta {
+  grid-area: meta;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  overflow-wrap: anywhere;
+}
 
 .board .acoes { grid-area: acoes; display: flex; gap: 8px; padding-top: 8px; }
 
 .vazio { color: var(--text-muted); padding: 12px 4px; }
 
+.falha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
 .busca-wrap { display: block; padding-top: 16px; }
+
+.rotulo-campo {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
 
 input[type="search"], input[type="text"] {
   width: 100%;
   padding: 12px 14px;
-  font-size: 16px;
+  font-size: 16px;                 /* 16px trava o zoom automático do iOS */
   font-family: var(--font);
   color: var(--text);
   background: var(--surface);
@@ -221,25 +356,31 @@ input[type="search"], input[type="text"] {
   box-shadow: var(--shadow-sm);
 }
 
-input:focus-visible, button:focus-visible {
+input[type="search"]:focus, input[type="text"]:focus { border-color: var(--blue-2); }
+
+input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
 .linha-form { display: flex; gap: 8px; padding-top: 10px; }
 
-/* botão primário do v1: gradiente dourado com texto escuro */
+/* ── botões ────────────────────────────────────────────────────────────────── */
+/* Antes daqui não havia UMA regra :hover ou :active no arquivo: no PC o clique
+   funcionava, mas nada respondia ao mouse e a interface parecia morta. */
 .botao-primario {
   font-family: var(--font);
   font-weight: 700;
-  font-size: 15px;
-  color: #241a00;
+  font-size: var(--t-md);
+  color: var(--sobre-ouro);
   background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dim) 100%);
   border: 0;
   border-radius: var(--r-md);
   padding: 12px 18px;
+  min-height: 44px;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
+  transition: filter .14s, transform .08s, background-color .14s, border-color .14s;
 }
 
 .botao-raso {
@@ -250,59 +391,147 @@ input:focus-visible, button:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 10px 16px;
+  min-height: 44px;
   cursor: pointer;
+  transition: background-color .14s, transform .08s, border-color .14s;
 }
 
 .mini {
   font-family: var(--font);
   font-size: 13px;
-  padding: 4px 10px;
+  /* alvo de 44px: com 4px de padding o botão dava 26px e era inacertável em
+     tela sensível ao toque */
+  min-height: 44px;
+  padding: 6px 14px;
   color: var(--text);
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background-color .14s, transform .08s, border-color .14s;
 }
 
-/* home do v1: menu de botões grandes */
-.menu { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; }
+select.mini { padding-right: 8px; }
 
 .btn-menu {
   width: 100%;
   font-family: var(--font);
   font-weight: 700;
   font-size: 15.5px;
+  text-align: left;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 15px 18px;
+  min-height: 44px;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
+  transition: background-color .14s, transform .08s, border-color .14s, box-shadow .14s;
 }
 
 .btn-menu.primario {
-  color: #241a00;
+  color: var(--sobre-ouro);
   background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dim) 100%);
   border-color: transparent;
 }
 
+.btn-menu.menor {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 18px;
+  color: var(--text-dim);
+  background: transparent;
+  box-shadow: none;
+}
+
+.link-botao {
+  font-family: var(--font);
+  font-size: inherit;
+  font-weight: 700;
+  color: var(--blue-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(.4);
+  color: var(--text-muted);
+}
+
+/* hover só onde existe ponteiro de verdade, senão o estado gruda no celular */
+@media (hover: hover) and (pointer: fine) {
+  .btn-menu:hover:not(:disabled) {
+    background: var(--hover);
+    border-color: var(--blue-2);
+    box-shadow: var(--shadow-md);
+  }
+  .btn-menu.primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--gold); }
+  .btn-menu.menor:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+  .botao-primario:hover:not(:disabled) { filter: brightness(1.06); }
+  .botao-raso:hover:not(:disabled) { background: var(--hover); border-color: var(--blue-2); }
+  .mini:hover:not(:disabled) { background: var(--hover); border-color: var(--blue-2); }
+  .voltar:hover { color: var(--blue-2); }
+  .saiba:hover, .link-botao:hover { color: var(--blue); }
+  .sala-chip:hover { border-color: var(--blue-2); }
+}
+
+/* pressão vale pro mouse E pro toque */
+.btn-menu:active:not(:disabled),
+.botao-primario:active:not(:disabled),
+.botao-raso:active:not(:disabled),
+.mini:active:not(:disabled) {
+  transform: translateY(1px);
+  background-color: var(--press);
+}
+.btn-menu.primario:active:not(:disabled),
+.botao-primario:active:not(:disabled) {
+  background: var(--gold-dim);
+  filter: none;
+}
+.voltar:active { transform: translateY(1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-menu, .botao-primario, .botao-raso, .mini { transition: none; }
+  .btn-menu:active, .botao-primario:active, .botao-raso:active, .mini:active {
+    transform: none;
+  }
+}
+
+/* home do v1: menu de botões grandes */
+.menu { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; }
+
 .eyebrow {
   padding-top: 22px;
-  font-size: 12.5px;
+  font-size: var(--t-xs);
   font-weight: 800;
   letter-spacing: 2.2px;
   text-transform: uppercase;
-  color: var(--gold-dim);
+  color: var(--gold-texto);
 }
 
-.tagline { color: var(--text-dim); padding-top: 2px; }
+.tagline { color: var(--text-dim); padding-top: 6px; }
 
 .saiba {
   display: inline-block;
   margin-top: 26px;
   color: var(--text-dim);
   font-size: 14px;
+}
+
+.cta-suave {
+  margin-top: 22px;
+  padding: 14px 16px;
+  color: var(--text-dim);
+  font-size: 14px;
+  background: var(--bg2);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
 }
 
 .voltar {
@@ -313,26 +542,91 @@ input:focus-visible, button:focus-visible {
   color: var(--text-dim);
   background: none;
   border: 0;
-  padding: 4px 0;
+  padding: 6px 0;
+  min-height: 44px;
   cursor: pointer;
+  transition: color .14s, transform .08s;
 }
 
 .pills { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 12px; }
 
 .pill {
-  font-size: 12.5px;
+  font-size: var(--t-xs);
   font-weight: 600;
   color: var(--text-dim);
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 3px 11px;
+  font-variant-numeric: tabular-nums;
 }
 
-.pill-azul { color: #fff; background: var(--blue-2); border-color: transparent; }
+.pill-azul { color: var(--sobre-azul); background: var(--blue-2); border-color: transparent; }
+
+.pill-ouro {
+  color: var(--sobre-ouro);
+  background: var(--gold);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.pill-fraco { color: var(--text-muted); background: transparent; }
+
+/* ── componentes fantasma (carregando) ─────────────────────────────────────── */
+.ghost {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--bg2) 0%, var(--bg3) 50%, var(--bg2) 100%);
+  background-size: 200% 100%;
+  animation: ghost-desliza 1.3s linear infinite;
+}
+
+.ghost-li { pointer-events: none; }
+.ghost-li .g-disc { grid-area: disc; height: 15px; width: 62%; }
+.ghost-li .g-meta { grid-area: meta; height: 12px; width: 84%; margin-top: 5px; }
+.ghost-li .g-sala { grid-area: sala; align-self: center; height: 30px; width: 58px; border-radius: var(--r-md); }
+
+.g-chip { height: 27px; width: 58px; border-radius: 999px; }
+
+.hero-num.ghost-num {
+  color: transparent;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--bg2) 0%, var(--bg3) 50%, var(--bg2) 100%);
+  background-size: 200% 100%;
+  animation: ghost-desliza 1.3s linear infinite;
+  width: 2.2ch;
+}
+
+@keyframes ghost-desliza {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost, .hero-num.ghost-num { animation: none; background: var(--bg3); }
+}
+
+/* ── trava do site ─────────────────────────────────────────────────────────── */
+body.bloqueado main,
+body.bloqueado .pills,
+body.bloqueado .rodape { display: none; }
+
+.bloqueio { max-width: var(--col); margin: 0 auto; padding: 24px 18px; }
+
+.bloqueio-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--gold);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 22px;
+}
+
+.bloqueio-card h2 { font-size: var(--t-xl); font-weight: 800; padding-bottom: 6px; }
+.bloqueio-card p { color: var(--text-dim); }
 
 .rodape {
-  max-width: 640px;
+  max-width: var(--col);
   margin: 30px auto 0;
   padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
   border-top: 2px solid var(--gold);
@@ -344,7 +638,7 @@ input:focus-visible, button:focus-visible {
 #toast {
   position: fixed;
   left: 50%;
-  bottom: 92px;
+  bottom: 40px;
   transform: translateX(-50%) translateY(20px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -356,6 +650,7 @@ input:focus-visible, button:focus-visible {
   transition: opacity .18s, transform .18s;
   pointer-events: none;
   max-width: 90vw;
+  z-index: 10;
 }
 
 #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -372,4 +667,66 @@ input:focus-visible, button:focus-visible {
 
 @media (prefers-color-scheme: dark) {
   .perigo { color: #e74c3c; border-color: #e74c3c; }
+}
+
+/* ── colunas (só ganham vida no desktop) ───────────────────────────────────── */
+.colunas { display: block; }
+
+/* ── desktop: antes daqui o único @media de layout era um ajuste de margem em
+   640px, então tela de 1440px mostrava a mesma coluna de celular esticada ─── */
+@media (min-width: 768px) {
+  :root { --col: 720px; }
+
+  /* menu 2x2: os quatro caminhos cabem sem rolagem */
+  .menu {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .home-titulo { font-size: 32px; }
+  .hero-num { font-size: 64px; }
+}
+
+@media (min-width: 1100px) {
+  :root { --col: 1080px; --gap-col: 26px; }
+
+  .colunas {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--gap-col);
+    align-items: start;
+  }
+
+  .colunas-agora { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+
+  /* a primeira seção de cada coluna não pode empurrar a coluna pra baixo */
+  .coluna > .secao:first-child { padding-top: 16px; }
+
+  /* a largura extra vira informação lado a lado, não linha esticada */
+  .board li {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "disc meta sala"
+      "acoes acoes acoes";
+    align-items: center;
+    gap: 4px 16px;
+  }
+
+  .board .meta { font-size: var(--t-sm); }
+  .ghost-li .g-meta { width: 92%; margin-top: 0; }
+
+  .home-titulo { font-size: 38px; max-width: 26ch; text-wrap: balance; }
+  .tagline { max-width: 60ch; text-wrap: pretty; }
+  .menu { grid-template-columns: 1fr 1fr; max-width: 720px; }
+  /* campo de busca de 1080px de largura é desconfortável de ler */
+  .busca-wrap { max-width: 560px; }
+}
+
+/* mouse tem mira melhor que dedo: linha mais compacta e herói menos dramático.
+   O alvo de 44px do .mini NÃO encolhe aqui: notebook com tela de toque casa
+   `pointer: fine` pelo mouse e continua sendo tocado com o dedo. */
+@media (pointer: fine) and (min-width: 1100px) {
+  .board li { padding: 10px 16px; }
+  .hero-num { font-size: 52px; }
 }

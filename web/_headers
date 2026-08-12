@@ -1,15 +1,14 @@
+# Um bloco só. Antes havia `/*` E `/` com o mesmo conteúdo, e o Cloudflare
+# emitia CSP e HSTS duplicados: enquanto idênticos não muda nada, mas editar um
+# e esquecer o outro faz o navegador aplicar a interseção e algo para de
+# funcionar sem explicação.
 /*
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri https://o4511786471456768.ingest.us.sentry.io/api/4511786479386624/security/?sentry_key=3883535ebfb84453e132d81009942779
 
-/
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
-  X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://js.sentry-cdn.com https://browser.sentry-cdn.com; connect-src 'self' https://jbdmkbivmflauushiqca.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable

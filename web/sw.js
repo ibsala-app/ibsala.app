@@ -1,6 +1,7 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-3'
+const CACHE = 'ibsala-v5-4'
 const SHELL = ['/', '/style.css', '/app.js', '/config.js', '/manifest.json',
+  '/fonts/inter-latin.woff2', '/fonts/inter-latin-ext.woff2',
   '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.svg']
 
 self.addEventListener('install', (e) => {
