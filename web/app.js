@@ -1,4 +1,7 @@
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js'
+// `?v=` no import também: a query do `<script>` não é herdada pelo import
+// estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
+// sw.js e é verificado por scripts/versao.py.
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=20'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -140,6 +143,20 @@ aplicarTema(temaGuardado())
 
 // ── UI helpers ───────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id)
+
+// Um id que sumiu (rename entre deploys, HTML novo com JS velho) matava o
+// módulo inteiro na primeira linha: eram 17 addEventListener no nível do
+// arquivo, nenhum com guarda. IBSALA-F, 12/08: `$('btn-push')` veio null depois
+// que o #22 renomeou o botão pra `chk-push`, e com isso login, busca, exportação
+// e exclusão de conta pararam de responder junto. Agora o id ausente vira UM
+// evento no Sentry e um botão morto, não um app morto.
+const faltando = []
+const on = (id, evento, fn, opcoes) => {
+  const el = $(id)
+  if (!el) { faltando.push(id); return }
+  el.addEventListener(evento, fn, opcoes)
+}
+
 let toastTimer
 function toast(msg) {
   const t = $('toast')
@@ -457,11 +474,11 @@ function falhaNoMapa({ vazio = false } = {}) {
   toast(vazio ? 'O mapa de hoje ainda não chegou.' : 'Não deu pra carregar o mapa de hoje.')
 }
 
-$('btn-retry').addEventListener('click', (e) =>
+on('btn-retry', 'click', (e) =>
   ocupado(e.currentTarget, () => (pronto = carregarAgora({ ghost: true }))))
 // handler em JS, nunca onclick inline: a CSP não tem 'unsafe-inline' em
 // script-src e handler inline morre calado (foi assim que a Inter não carregava)
-$('btn-recarregar').addEventListener('click', () => location.reload())
+on('btn-recarregar', 'click', () => location.reload())
 
 // ── Trava do site (o botão do admin agora vale de verdade) ───────────────────
 function aplicarTrava() {
@@ -481,13 +498,13 @@ let buscaTimer
 // duas buscas em voo e a mais VELHA chegando depois sobrescreviam a nova: quem
 // digitava "sist" e completava "sistemas embarcados" via a lista voltar
 let seqBusca = 0
-$('busca-input').addEventListener('input', (e) => {
+on('busca-input', 'input', (e) => {
   clearTimeout(buscaTimer)
   const termo = e.target.value.trim()
   buscaTimer = setTimeout(() => buscar(termo), 300)
 })
 
-$('btn-busca-retry').addEventListener('click', (e) =>
+on('btn-busca-retry', 'click', (e) =>
   ocupado(e.currentTarget, () => buscar($('busca-input').value.trim())))
 
 // `sala_canon` entra: o placeholder promete busca por sala, mas só o rótulo cru
@@ -757,6 +774,9 @@ async function atualizarBotaoPush() {
   const chk = $('chk-push')
   const rotulo = $('push-rotulo')
   const dica = $('push-dica')
+  // mesma classe de falha do `on()`: HTML velho com JS novo derruba aqui também,
+  // e uma promise rejeitada no meio do carregamento do perfil não ajuda ninguém
+  if (!chk || !rotulo || !dica) return
 
   if (!('PushManager' in window)) {
     chk.disabled = true
@@ -798,7 +818,7 @@ async function salvarInscricao(sub) {
   }, { onConflict: 'endpoint' }))
 }
 
-$('chk-push').addEventListener('change', async (e) => {
+on('chk-push', 'change', async (e) => {
   const chk = e.target
   const querLigar = chk.checked
 
@@ -865,7 +885,7 @@ pintarTema(temaGuardado())
 
 $('ajustes-versao').textContent = `IBSALA v5 · termos versão ${TERMOS_VERSAO}`
 
-$('form-trocar-username').addEventListener('submit', (e) => {
+on('form-trocar-username', 'submit', (e) => {
   e.preventDefault()
   const btn = e.target.querySelector('button')
   return ocupado(btn, async () => {
@@ -892,7 +912,7 @@ $('form-trocar-username').addEventListener('submit', (e) => {
 
 // `receber_email` existe no schema desde a 0001 e NUNCA foi exposto nem lido:
 // o app manda email e o aluno não tinha como desligar
-$('chk-email').addEventListener('change', (e) => {
+on('chk-email', 'change', (e) => {
   const chk = e.target
   const quer = chk.checked
   return ocupado(chk, async () => {
@@ -910,7 +930,7 @@ function mostrarErro(id, msg) {
 }
 
 // ── Reclamações / dados (LGPD) ───────────────────────────────────────────────
-$('form-reclamacao').addEventListener('submit', (e) => {
+on('form-reclamacao', 'submit', (e) => {
   e.preventDefault()
   const btn = e.target.querySelector('button')
   return ocupado(btn, async () => {
@@ -924,7 +944,7 @@ $('form-reclamacao').addEventListener('submit', (e) => {
   })
 })
 
-$('btn-export').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-export', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   const { data, error } = await chamar(sb.rpc('exportar_meus_dados'))
   if (error) { toast(error.msg); return }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -942,15 +962,15 @@ $('btn-export').addEventListener('click', (ev) => ocupado(ev.currentTarget, asyn
   toast('Arquivo com seus dados gerado.')
 }))
 
-$('btn-excluir').addEventListener('click', () => {
+on('btn-excluir', 'click', () => {
   $('excluir-confirma').hidden = false
   $('btn-excluir-confirma').focus()
 })
-$('btn-excluir-cancela').addEventListener('click', () => {
+on('btn-excluir-cancela', 'click', () => {
   $('excluir-confirma').hidden = true
   $('btn-excluir').focus()
 })
-$('btn-excluir-confirma').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-excluir-confirma', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000)
   if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
   // se o signOut remoto falhar, a sessão de uma conta que não existe mais fica
@@ -1039,7 +1059,7 @@ async function carregarAdmin() {
   }))
 }
 
-$('btn-login').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-login', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   if (!sb) { toast('O app não carregou por completo. Recarrega a página.'); return }
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
@@ -1049,21 +1069,21 @@ $('btn-login').addEventListener('click', (ev) => ocupado(ev.currentTarget, async
   if (error) toast('Não deu pra abrir o login do Google. Tenta de novo.')
 }))
 
-$('btn-sair').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-sair', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   const { error } = await sb.auth.signOut()
   toast(error ? 'Não deu pra sair. Tenta de novo.' : 'Você saiu.')
 }))
 
-$('btn-conta-retry').addEventListener('click', (ev) =>
+on('btn-conta-retry', 'click', (ev) =>
   ocupado(ev.currentTarget, () => carregarPerfil()))
 
-$('btn-cancelar-cadastro').addEventListener('click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-cancelar-cadastro', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   await sb.auth.signOut().catch(() => sb.auth.signOut({ scope: 'local' }))
   mostrar('home')
   toast('Cadastro cancelado.')
 }))
 
-$('form-username').addEventListener('submit', (e) => {
+on('form-username', 'submit', (e) => {
   e.preventDefault()
   const btn = e.target.querySelector('button')
   return ocupado(btn, async () => {
@@ -1259,5 +1279,14 @@ if (!sb) {
 
 // última linha de propósito: se algo acima lançar, esta marca não aparece, e é
 // exatamente esse o estado que deixou a página pintada e sem NENHUM botão
-// funcionando em 12/08
-document.documentElement.dataset.app = 'pronto'
+// funcionando em 12/08. `incompleto` é o caso mais brando, em que o módulo foi
+// até o fim mas algum id do HTML não existe: a página funciona quase toda, e
+// sem este aviso ninguém ficaria sabendo (o aluno só vê um botão que não faz
+// nada). O `?.` duplo é pro loader do Sentry bloqueado (firewall da faculdade,
+// bloqueador de anúncio) não virar um segundo erro em cima do primeiro.
+if (faltando.length) {
+  document.documentElement.dataset.app = 'incompleto'
+  window.Sentry?.captureMessage?.(`ids ausentes no DOM: ${faltando.join(', ')}`, 'error')
+} else {
+  document.documentElement.dataset.app = 'pronto'
+}
