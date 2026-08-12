@@ -5,14 +5,31 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Origem fixa: é a única function com CORS, e ela apaga conta. Com `*`,
+// qualquer página que tivesse conseguido um token do aluno podia gastá-lo aqui.
+const ORIGENS = new Set([
+  'https://ibsala.com.br',
+  'https://www.ibsala.com.br',
+  'https://ibsala.pages.dev',
+])
+
+function cors(req: Request) {
+  const origem = req.headers.get('Origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': ORIGENS.has(origem) ? origem : 'https://ibsala.com.br',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 Deno.serve(async (req) => {
+  const CORS = cors(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  // sem isto, um GET com o header Authorization apagava a conta
+  if (req.method !== 'POST') {
+    return new Response('método não permitido', { status: 405, headers: CORS })
+  }
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SERVICE_KEY')!)
   const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '')

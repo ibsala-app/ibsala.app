@@ -5,6 +5,7 @@
 //                      SUPABASE_URL, SERVICE_KEY
 
 import webpush from 'npm:web-push@3.6.7'
+import { segredoConfere } from '../_shared/cron.ts'
 
 const SLOTS: Record<string, [number, number]> = {
   manha1: [6 * 60, 9 * 60 + 29],
@@ -55,9 +56,7 @@ function slotDoHorario(h: string): string | null {
 }
 
 Deno.serve(async (req) => {
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
-    return new Response('nope', { status: 401 })
-  }
+  if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const { slot } = await req.json().catch(() => ({}))
   if (!SLOTS[slot]) return new Response('slot inválido', { status: 400 })
 

@@ -329,6 +329,8 @@ $('busca-input').addEventListener('input', (e) => {
 const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.turma]
   .some((v) => String(v ?? '').toLowerCase().includes(alvo))
 
+const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+
 async function buscar(termo) {
   const lista = $('busca-lista')
   if (termo.length < 2) {
@@ -356,7 +358,10 @@ async function buscar(termo) {
   const codigosHoje = new Set(deHoje.map((r) => r.codigo).filter(Boolean))
 
   // 2) catálogo cobre quem não tem aula hoje (289 disciplinas contra 99 no mapa)
-  const t = `%${termo}%`
+  // O `.or()` do PostgREST é montado como TEXTO, então vírgula, ponto e
+  // parêntese digitados na busca mudavam a expressão do filtro (o mínimo era
+  // erro 400 em quem buscasse "PA: INTRO, DIREITO"). Valor entre aspas resolve.
+  const t = aspasPostgrest(`%${termo}%`)
   const { data, error } = await sb.from('disciplinas_historico')
     .select('codigo,turma,disciplina,professor')
     .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)

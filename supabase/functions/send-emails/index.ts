@@ -11,6 +11,8 @@
 // Secrets: CRON_SECRET, RESEND_API_KEY, SUPABASE_URL, SERVICE_KEY
 //          (EMAIL_FROM opcional, default abaixo)
 
+import { segredoConfere } from '../_shared/cron.ts'
+
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
@@ -128,9 +130,7 @@ function renderBody(body: string): string | null {
 }
 
 Deno.serve(async (req) => {
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
-    return new Response('nope', { status: 401 })
-  }
+  if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   if (!RESEND_KEY) {
     // key ainda não configurada: não queima tentativas da fila
     return Response.json({ enviados: 0, motivo: 'RESEND_API_KEY ausente' })
