@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-23'
+const CACHE = 'ibsala-v5-24'
 // O `?v=` do index.html entra no precache: `caches.match` compara a URL inteira,
 // query junto, então guardar `/app.js` cru deixaria o pedido real (`/app.js?v=20`)
 // sem reserva offline. Um número só, tirado do próprio CACHE, pra não existir

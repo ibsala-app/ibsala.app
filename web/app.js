@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=23'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=24'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -613,38 +613,78 @@ function cardAula(r) {
 
 function cardCatalogo(r) {
   const situacao = mapaCarregado ? 'sem aula hoje' : 'mapa de hoje indisponível'
+  // sem o quadrado cinza com traço: aqui ele não significava nada (a meta já diz
+  // "sem aula hoje") e ainda deixava a lista com dois tratamentos de sala lado a
+  // lado. No "Hoje" ele fica, porque lá o traço quer dizer "sua aula é agora e eu
+  // não sei a sala", que é informação de verdade.
   const el = li(`
     <span class="disc">${esc(r.disciplina)}</span>
-    <span class="sala sala-vazia">—</span>
     <span class="meta">${situacao} · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
   if (perfil) el.append(acoesAdicionar(r))
   return el
 }
 
+// Eram dois controles diferentes pra mesma decisão: a linha do mapa de hoje
+// ganhava um botão "Adicionar na QUI" e a do catálogo um <select> nativo, sem
+// nada na tela explicando por que a forma mudava no meio da lista. Agora os dois
+// usam a mesma fila de pílulas de "Minhas matérias": o dia escolhido fica
+// visível, e o que já está na sua lista aparece marcado ANTES de você tentar (o
+// aviso de duplicado só chegava depois da ida ao servidor).
 function acoesAdicionar(r, { dia } = {}) {
   const acoes = document.createElement('span')
   acoes.className = 'acoes'
+  const fila = document.createElement('span')
+  fila.className = 'dias dias-escolha'
   const btn = document.createElement('button')
+  btn.type = 'button'
   btn.className = 'mini'
 
-  if (dia) {
-    // linha do mapa de hoje: o app JÁ sabe o dia, então não pergunta. O seletor
-    // aqui era decoração que dava chance de errar
-    btn.textContent = `Adicionar na ${DIAS[dia]}`
-    btn.addEventListener('click', () => adicionarMateria(r, dia, btn))
-    acoes.append(btn)
-    return acoes
+  // linha do mapa de hoje já vem com o dia certo marcado: continua sendo um
+  // toque só. Domingo (getDay() === 0) não é dia letivo e cai no caso sem dia.
+  let escolhido = dia >= 1 && dia <= 6 ? dia : null
+  const novos = new Set()
+  const jaTem = (d) => novos.has(d) || minhas.some((m) => m.dia === d &&
+    (r.codigo ? m.codigo === r.codigo : m.disciplina === r.disciplina))
+
+  function pintar() {
+    for (const p of fila.children) {
+      const d = +p.dataset.dia
+      const tem = jaTem(d)
+      p.classList.toggle('escolhida', d === escolhido)
+      p.classList.toggle('ja-tem', tem)
+      // o ✓ carrega o "já tenho" junto com a borda tracejada: dizer isso só por
+      // cor mais fraca reprovava no contraste do tema claro
+      p.textContent = tem ? `${DIAS[d]} ✓` : DIAS[d]
+      p.setAttribute('aria-label', tem ? `${DIAS_LONGO[d]}, já na sua lista` : DIAS_LONGO[d])
+      p.setAttribute('aria-pressed', String(d === escolhido))
+    }
+    if (!escolhido) btn.textContent = 'Escolha o dia'
+    else if (jaTem(escolhido)) btn.textContent = `Já na sua lista (${DIAS[escolhido]})`
+    else btn.textContent = `Adicionar na ${DIAS[escolhido]}`
+    btn.disabled = !escolhido || jaTem(escolhido)
   }
 
-  // catálogo: a disciplina não tem aula hoje, então o dia é a única coisa que o
-  // app não tem como saber (o mapa guarda só o dia corrente)
-  const sel = document.createElement('select')
-  sel.className = 'mini'
-  sel.setAttribute('aria-label', 'Dia da semana')
-  sel.innerHTML = DIAS.map((d, i) => (i ? `<option value="${i}">${d}</option>` : '')).join('')
-  btn.textContent = 'Adicionar'
-  btn.addEventListener('click', () => adicionarMateria(r, +sel.value, btn))
-  acoes.append(sel, btn)
+  for (let d = 1; d <= 6; d++) {
+    const p = document.createElement('button')
+    p.type = 'button'
+    p.className = 'pill-dia pill-escolha'
+    p.dataset.dia = d
+    p.textContent = DIAS[d]
+    p.setAttribute('aria-label', DIAS_LONGO[d])
+    p.addEventListener('click', () => { escolhido = d; pintar() })
+    fila.append(p)
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!escolhido) return
+    // marca a pílula na hora: `carregarMinhas` é assíncrono e a lista da busca
+    // ficaria dizendo "Adicionar" numa matéria que já entrou
+    if (await adicionarMateria(r, escolhido, btn)) novos.add(escolhido)
+    pintar()
+  })
+
+  pintar()
+  acoes.append(fila, btn)
   return acoes
 }
 
@@ -1316,10 +1356,11 @@ async function adicionarMateria(r, dia, btn) {
     // expirada: o aluno acreditava, ia conferir e não estava lá
     if (error) {
       toast(error.tipo === 'duplicado' ? `Você já tem essa matéria na ${DIAS[dia]}.` : error.msg)
-      return
+      return false
     }
     toast(`Adicionada na ${DIAS[dia]}.`)
     carregarMinhas()
+    return true
   })
 }
 
