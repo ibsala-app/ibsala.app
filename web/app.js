@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=21'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=22'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -198,6 +198,11 @@ function ghostChips(el, n = 12) {
 
 // ── Navegação (com history, pra o gesto de voltar não fechar a PWA) ──────────
 let telaAtual = 'home'
+
+// lido no carregamento, antes de qualquer mostrar() mexer no hash: é o que
+// separa "abriu no /" de "abriu no /#agora" (atalho do manifest ou link colado)
+const HASH_NO_BOOT = location.hash.replace('#', '')
+let roteouLogado = false
 
 // telas que só existem pra quem tem conta: digitar #ajustes deslogado abria uma
 // tela de configurações vazia, sem dizer por quê
@@ -724,6 +729,7 @@ async function carregarPerfil() {
   mostrarConta()
   aplicarTrava()
   if (perfil) {
+    abrirNasAulasDoDia()
     tocarUltimoAcesso()
     carregarMinhas()
     atualizarBotaoPush()
@@ -735,6 +741,22 @@ async function carregarPerfil() {
     $('btn-abrir-admin').hidden = !adm
     if (adm) carregarAdmin()
   }
+}
+
+// A tela inicial é decidida no boot a partir do hash, ANTES de a sessão existir
+// (ela só chega no onAuthStateChange), e sem hash o boot não chama mostrar()
+// nenhum: valia o `ativa` do HTML, que é a home. Quem já tinha conta abria o app
+// numa tela de apresentação e gastava mais um toque pra ver a aula do dia.
+// Três guardas, cada uma por um motivo concreto: `roteouLogado` porque o
+// onAuthStateChange dispara de novo a cada refresh de token; `HASH_NO_BOOT`
+// porque `/#agora` e `/#buscar` são atalhos do manifest e link colado no zap;
+// e `telaAtual === 'home'` porque o perfil pode chegar depois de a pessoa já ter
+// tocado num botão, e arrancar alguém da tela é pior que um toque a mais.
+function abrirNasAulasDoDia() {
+  if (roteouLogado || HASH_NO_BOOT || telaAtual !== 'home') return
+  roteouLogado = true
+  mostrar('conta', { push: false })
+  history.replaceState({ tela: 'conta' }, '', '#conta')
 }
 
 // A 0001 promete "throttle fica no client; smart-write do v1 era 6h" e esse
