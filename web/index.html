@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=23">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -235,7 +235,8 @@
             <p id="materias-falha" class="falha" role="alert" hidden>Não deu pra carregar suas
               matérias. Puxa a tela pra baixo ou recarrega a página.</p>
             <p id="materias-vazio" class="vazio" hidden>Você ainda não tem matéria nenhuma.
-              Busque a disciplina na planilha e use o botão Adicionar com o dia da semana.</p>
+              Busque a disciplina na planilha e adicione com o dia da semana. Cada matéria vira
+              um bloco só, com uma pílula por dia: o × tira o dia, o Remover tira a matéria.</p>
             <button id="materias-cta" class="btn-menu primario" data-vai="buscar" hidden>Adicionar matérias</button>
           </div>
         </div>
@@ -361,6 +362,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=22"></script>
+  <script type="module" src="app.js?v=23"></script>
 </body>
 </html>
