@@ -215,7 +215,21 @@ main {
   background: linear-gradient(180deg, var(--blue) 0%, var(--gold) 100%);
 }
 
-.marca { display: flex; align-items: center; gap: 10px; }
+/* virou <button> pra levar pra home; o reset existe pra ele continuar parecendo
+   a marca, e não um botão de formulário */
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
 
 .marca-nome {
   display: block;
