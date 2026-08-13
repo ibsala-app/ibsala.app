@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-24'
+const CACHE = 'ibsala-v5-25'
 // O `?v=` do index.html entra no precache: `caches.match` compara a URL inteira,
 // query junto, então guardar `/app.js` cru deixaria o pedido real (`/app.js?v=20`)
 // sem reserva offline. Um número só, tirado do próprio CACHE, pra não existir
@@ -65,12 +65,22 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {}
   try { d = e.data.json() } catch { d = { body: e.data && e.data.text() } }
-  e.waitUntil(self.registration.showNotification(d.title || 'IBSALA', {
-    body: d.body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    tag: d.tag || 'ibsala',
-  }))
+  const tag = d.tag || 'ibsala'
+  e.waitUntil((async () => {
+    await self.registration.showNotification(d.title || 'IBSALA', {
+      body: d.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag,
+    })
+    // o aviso de teste tem que PROVAR entrega: sem este recado, a tela de
+    // Ajustes só saberia que o servidor aceitou o envio, e "aceito" não é
+    // "chegou". `includeUncontrolled` porque a aba pode não estar sob o worker
+    // novo ainda (primeira carga depois de um deploy).
+    if (tag !== 'ibsala-teste') return
+    const abas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of abas) c.postMessage({ tipo: 'push-teste-recebido', em: Date.now() })
+  })())
 })
 
 self.addEventListener('notificationclick', (e) => {

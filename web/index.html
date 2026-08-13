@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=25">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -272,6 +272,11 @@
           </label>
           <p id="push-dica" class="dica">Você recebe a sala de cada aula ~50 minutos antes
             do horário.</p>
+          <!-- o interruptor mostra que a inscrição existe, e existir não é chegar:
+               o teste manda um aviso de verdade e só confirma quando ELE volta do
+               service worker, não quando o servidor aceita o envio -->
+          <button id="btn-push-teste" class="mini" disabled>Enviar aviso de teste</button>
+          <p id="push-teste-status" class="dica" hidden></p>
           <label class="linha-switch" for="chk-email">
             <span class="linha-switch-texto">Emails do IBSALA</span>
             <input type="checkbox" id="chk-email" class="switch" role="switch">
@@ -362,6 +367,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=24"></script>
+  <script type="module" src="app.js?v=25"></script>
 </body>
 </html>
