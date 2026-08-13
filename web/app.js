@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=22'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=23'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -1175,32 +1175,100 @@ async function carregarMinhas() {
 
   $('lista-materias').removeAttribute('aria-busy')
   $('board-hoje').removeAttribute('aria-busy')
-  $('lista-materias').replaceChildren(...minhas.map((m) => {
-    const el = li(`
-      <span class="disc">${esc(m.disciplina)}</span>
-      <span class="dia-chip">${DIAS[m.dia] ?? '?'}</span>
-      <span class="meta">${esc(m.turma)} · ${esc(m.professor ?? '')} · ${esc(m.codigo)}</span>`)
-    const acoes = document.createElement('span')
-    acoes.className = 'acoes'
-    const btn = document.createElement('button')
-    btn.className = 'mini'
-    btn.textContent = 'Remover'
-    btn.addEventListener('click', () => ocupado(btn, async () => {
-      const { error: e } = await chamar(sb.from('materias').delete()
-        .eq('id', m.id).eq('aluno_id', sessao.user.id))
-      // sem checar erro, a lista recarregava idêntica e o item continuava lá
-      // sem ninguém explicar por quê
-      if (e) { toast(e.msg); return }
-      toast('Matéria removida.')
-      carregarMinhas()
-    }))
-    acoes.append(btn)
-    el.append(acoes)
-    return el
-  }))
+  $('lista-materias').replaceChildren(...agruparMaterias(minhas).map(blocoMateria))
   $('materias-vazio').hidden = minhas.length > 0
   pintarPassos()
   pintarHoje()
+}
+
+// `materias` guarda uma linha por (aluno, código, dia), então Estrutura de Dados
+// cursada na SEG e na QUA aparecia duas vezes na lista, cada cópia com sua
+// pílula e seu botão de remover. O agrupamento é só de apresentação: o banco
+// continua com uma linha por dia, e é por isso que `pintarHoje` não muda.
+function agruparMaterias(linhas) {
+  const grupos = new Map()
+  for (const m of linhas) {
+    // código é a chave única da disciplina; linha antiga sem código cai no par
+    // disciplina+turma, que era o dedupe do v1
+    const chave = m.codigo || `${m.disciplina}|${m.turma}`
+    if (!grupos.has(chave)) grupos.set(chave, { ...m, dias: [] })
+    grupos.get(chave).dias.push({ id: m.id, dia: m.dia })
+  }
+  const lista = [...grupos.values()]
+  for (const g of lista) g.dias.sort((a, b) => a.dia - b.dia)
+  // a query vem ordenada por dia e depois disciplina, o que embaralhava a lista
+  // agrupada (a matéria da segunda subia na frente por causa do dia, não do nome)
+  lista.sort((a, b) => String(a.disciplina).localeCompare(String(b.disciplina), 'pt-BR'))
+  return lista
+}
+
+function blocoMateria(g) {
+  const el = li(`
+    <span class="disc">${esc(g.disciplina)}</span>
+    <span class="meta">${esc(g.turma)} · ${esc(g.professor ?? '')} · ${esc(g.codigo)}</span>`)
+
+  const dias = document.createElement('span')
+  dias.className = 'dias'
+  for (const d of g.dias) {
+    const pill = document.createElement('button')
+    pill.type = 'button'
+    pill.className = 'pill-dia'
+    pill.setAttribute('aria-label', `Tirar ${DIAS_LONGO[d.dia] ?? ''} de ${g.disciplina}`)
+    pill.append(DIAS[d.dia] ?? '?')
+    const x = document.createElement('span')
+    x.className = 'pill-x'
+    x.setAttribute('aria-hidden', 'true')
+    x.textContent = '×'
+    pill.append(x)
+    pill.addEventListener('click', () => ocupado(pill, async () => {
+      const { error } = await chamar(sb.from('materias').delete()
+        .eq('id', d.id).eq('aluno_id', sessao.user.id))
+      // sem checar erro, a lista recarregava idêntica e o dia continuava lá sem
+      // ninguém explicar por quê
+      if (error) { toast(error.msg); return }
+      toast(`${DIAS[d.dia]} tirada de ${g.disciplina}.`)
+      carregarMinhas()
+    }))
+    dias.append(pill)
+  }
+
+  const acoes = document.createElement('span')
+  acoes.className = 'acoes'
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'mini'
+  btn.textContent = 'Remover'
+  // com o bloco único, um toque apaga a matéria em TODOS os dias, e isso pede
+  // confirmação. `confirm()` nativo não serve: a CSP do projeto já pune diálogo
+  // inline e na PWA do iPhone ele interrompe o app inteiro. A confirmação é o
+  // próprio botão, e ela expira sozinha em 4s pra não ficar armada na tela.
+  let armado = null
+  const desarmar = () => {
+    clearTimeout(armado)
+    armado = null
+    btn.textContent = 'Remover'
+    btn.classList.remove('perigo')
+  }
+  btn.addEventListener('click', () => {
+    if (!armado) {
+      btn.textContent = 'Remover mesmo?'
+      btn.classList.add('perigo')
+      armado = setTimeout(desarmar, 4000)
+      return
+    }
+    desarmar()
+    ocupado(btn, async () => {
+      const { error } = await chamar(sb.from('materias').delete()
+        .in('id', g.dias.map((d) => d.id)).eq('aluno_id', sessao.user.id))
+      if (error) { toast(error.msg); return }
+      toast('Matéria removida.')
+      carregarMinhas()
+    })
+  })
+  acoes.append(btn)
+
+  el.append(dias, acoes)
+  return el
 }
 
 // Separado de carregarMinhas porque o "Hoje" depende de DUAS cargas (as

@@ -45,6 +45,8 @@ PARES = [
     ('erro de formulario', 'perigo', 'bg', 4.5),
     ('dica', 'text-dim', 'bg', 4.5),
     ('dia-chip', 'text-dim', 'bg2', 4.5),
+    ('pill-dia', 'text-dim', 'bg2', 4.5),
+    ('mini.perigo (Remover mesmo?)', 'perigo', 'bg2', 4.5),
     ('rodape', 'text-muted', 'bg', 4.5),
     ('voltar', 'text-dim', 'bg', 4.5),
     ('grupo-rotulo', 'text-muted', 'surface', 4.5),
