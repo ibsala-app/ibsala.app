@@ -4,18 +4,12 @@
 // Secrets da function: CRON_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY,
 //                      SUPABASE_URL, SERVICE_KEY
 
-import webpush from 'npm:web-push@3.6.7'
 import { segredoConfere } from '../_shared/cron.ts'
 import { hojeBRT, SLOTS, slotDoInicio } from '../_shared/slots.ts'
+import { enviar } from '../_shared/webpush.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
-
-webpush.setVapidDetails(
-  'mailto:ibsala.app@gmail.com',
-  Deno.env.get('VAPID_PUBLIC_KEY')!,
-  Deno.env.get('VAPID_PRIVATE_KEY')!,
-)
 
 async function rest(path: string, init: RequestInit = {}) {
   const r = await fetch(`${URL_BASE}/rest/v1/${path}`, {
@@ -79,24 +73,19 @@ Deno.serve(async (req) => {
     const titulo = salas.length === 1 ? `Sala ${salas[0]}` : `Salas ${salas.join(', ')}`
     const corpo = aulas.map((a) =>
       `${a.disciplina} · ${(a.professor || '').split(' ')[0]} · ${a.horario}`).join('\n')
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ title: titulo, body: corpo, tag: `ibsala-${slot}` }),
-      )
+    const r = await enviar(s, { title: titulo, body: corpo, tag: `ibsala-${slot}` })
+    if (r === 'enviado') {
       enviados++
-    } catch (e: any) {
+    } else if (r === 'morta') {
       // inscrição morta: limpa. O DELETE dentro de um Promise.all sem catch
       // derrubava a resposta inteira DEPOIS dos pushes já terem saído
-      if (e?.statusCode === 404 || e?.statusCode === 410) {
-        try {
-          await rest(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`,
-            { method: 'DELETE' })
-          limpas++
-        } catch { /* some na próxima rodada */ }
-      } else {
-        falhas++
-      }
+      try {
+        await rest(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`,
+          { method: 'DELETE' })
+        limpas++
+      } catch { /* some na próxima rodada */ }
+    } else {
+      falhas++
     }
   }))
 

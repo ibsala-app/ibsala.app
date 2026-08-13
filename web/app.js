@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=24'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=25'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -848,6 +848,21 @@ async function atualizarBotaoPush() {
     // contrário do que o rótulo acabou de dizer
     dica.textContent = 'Este navegador não entrega notificação. No iPhone, use o ' +
       'Safari com o app na Tela de Início; no computador, Chrome, Edge ou Firefox.'
+    pintarTesteDePush()
+    return
+  }
+  // permissão negada no sistema é caminho sem saída, e o interruptor aparecia
+  // habilitado e desmarcado, como se bastasse tocar: o aluno tocava, nada
+  // acontecia (o requestPermission só abre diálogo quando a permissão é
+  // `default`) e o toast de "negada" sumia em 3 segundos
+  if ('Notification' in window && Notification.permission === 'denied') {
+    chk.disabled = true
+    chk.checked = false
+    rotulo.textContent = 'Avisos bloqueados no sistema'
+    dica.textContent = 'A permissão de notificação do IBSALA foi negada neste aparelho. ' +
+      'No iPhone: Ajustes → Notificações → IBSALA. No computador: cadeado da barra de ' +
+      'endereço → Notificações.'
+    pintarTesteDePush()
     return
   }
   // no iPhone o subscribe só funciona com o app na Tela de Início, e sem dizer
@@ -858,6 +873,7 @@ async function atualizarBotaoPush() {
     rotulo.textContent = 'Avisos exigem o app na Tela de Início'
     dica.textContent = 'No iPhone: botão Compartilhar do Safari → "Adicionar à Tela de Início". ' +
       'Abra o IBSALA por esse ícone e o interruptor destrava.'
+    pintarTesteDePush()
     return
   }
   chk.disabled = false
@@ -870,7 +886,83 @@ async function atualizarBotaoPush() {
   const sub = await subAtual()
   chk.checked = !!sub && !!(await chamar(sb.from('push_subscriptions')
     .select('endpoint').eq('endpoint', sub.endpoint).maybeSingle())).data
+  pintarTesteDePush()
 }
+
+// ── Aviso de teste ───────────────────────────────────────────────────────────
+// O interruptor prova que a inscrição EXISTE. Nunca existiu nada que provasse
+// que o aviso CHEGA: `push_subscriptions` está em 0 desde o cutover e ninguém
+// nunca confirmou entrega em aparelho real. Aqui o app manda um push de verdade
+// e só declara sucesso quando o service worker devolve o recado de que recebeu.
+const PUSH_OK_CHAVE = 'ibsala:push-ok'
+const ESPERA_TESTE = 15000
+let timerTeste = null
+
+function ultimoTesteOk() {
+  try { return Number(localStorage.getItem(PUSH_OK_CHAVE) ?? 0) } catch { return 0 }
+}
+
+function statusTeste(texto) {
+  const p = $('push-teste-status')
+  if (!p) return
+  p.textContent = texto
+  p.hidden = !texto
+}
+
+function quandoLegivel(ms) {
+  const d = new Date(ms)
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const hoje = new Date().toDateString() === d.toDateString()
+  return hoje ? `às ${hora}` : `em ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, ${hora}`
+}
+
+function pintarTesteDePush() {
+  const btn = $('btn-push-teste')
+  const chk = $('chk-push')
+  if (!btn || !chk) return
+  // sem inscrição ligada não há o que testar, e o botão habilitado prometeria
+  // uma resposta que nunca viria
+  btn.disabled = !chk.checked
+  if (timerTeste) return
+  const ok = ultimoTesteOk()
+  statusTeste(ok ? `Último aviso confirmado neste aparelho ${quandoLegivel(ok)}.` : '')
+}
+
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  if (e.data?.tipo !== 'push-teste-recebido') return
+  clearTimeout(timerTeste)
+  timerTeste = null
+  try { localStorage.setItem(PUSH_OK_CHAVE, String(e.data.em ?? Date.now())) } catch { /* privada */ }
+  statusTeste(`Aviso de teste recebido ${quandoLegivel(e.data.em ?? Date.now())}. Está funcionando.`)
+})
+
+on('btn-push-teste', 'click', (ev) => ocupado(ev.currentTarget, async () => {
+  clearTimeout(timerTeste)
+  statusTeste('Enviado. Esperando ele chegar neste aparelho…')
+  const { data, error } = await chamar(sb.functions.invoke('push-teste', { method: 'POST' }))
+  if (error) {
+    timerTeste = null
+    statusTeste(`Não deu pra enviar: ${error.msg}`)
+    return
+  }
+  if (!data?.enviados) {
+    timerTeste = null
+    statusTeste(data?.motivo === 'sem inscricao'
+      ? 'Este aparelho não está inscrito. Liga o interruptor acima e tenta de novo.'
+      : 'O servidor não conseguiu entregar o aviso. Desliga e liga o interruptor acima.')
+    // inscrição morta some do banco no envio: o interruptor tem que parar de
+    // dizer que está tudo certo
+    if (data?.limpas) atualizarBotaoPush()
+    return
+  }
+  // o `finally` do ocupado destrava o botão; o timer é quem decide o texto
+  timerTeste = setTimeout(() => {
+    timerTeste = null
+    statusTeste('Enviamos, mas ele não chegou aqui em 15 segundos. Confere se a notificação ' +
+      'do IBSALA está liberada nos ajustes do aparelho e, no iPhone, se o app foi aberto ' +
+      'pelo ícone da Tela de Início.')
+  }, ESPERA_TESTE)
+}))
 
 async function salvarInscricao(sub) {
   const j = sub.toJSON()
