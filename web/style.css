@@ -398,6 +398,10 @@ main {
   background: var(--gold-soft);
   border-radius: var(--r-md);
   padding: 6px 12px;
+  /* largura mínima igual pra todo mundo: com `3L2` e `P2-202` na mesma lista,
+     cada badge terminava numa coluna diferente e a direita da tela ficava
+     serrilhada */
+  min-width: 4.6em;
   overflow-wrap: anywhere;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -451,6 +455,28 @@ main {
 .pill-x { font-size: var(--t-md); line-height: 1; opacity: .55; }
 .pill-dia:hover .pill-x { opacity: 1; }
 
+/* mesma pílula, outro papel: na busca ela ESCOLHE o dia em vez de tirar. Fica na
+   área de ações, alinhada à esquerda, e o dia já cadastrado vem tracejado pra
+   dizer "isso você já tem" antes do toque, não depois do erro do servidor. */
+/* a fila ocupa a linha inteira e o botão desce pra linha de baixo: dividindo a
+   largura com ele, as pílulas quebravam em duas fileiras e o botão saía com o
+   texto partido no meio ("Adicionar / na QUI") */
+.acoes .dias-escolha { justify-content: flex-start; flex: 1 1 100%; gap: 5px; }
+
+/* apertado de propósito: com o padding da pílula de "Minhas matérias" os seis
+   dias não cabiam em 390px e a fila quebrava 5 + 1 */
+.pill-escolha { min-height: 36px; padding: 5px 8px; }
+
+.pill-escolha.escolhida {
+  color: var(--sobre-azul);
+  background: var(--blue-2);
+  border-color: var(--blue-2);
+}
+
+/* o cinza mais claro reprovava no contraste (4,47:1 no tema claro), então o "já
+   tenho" é dito por borda tracejada e pelo ✓ no rótulo, não por cor mais fraca */
+.pill-escolha.ja-tem { border-style: dashed; }
+
 /* sem sala conhecida: não finge destaque de sala */
 .board .sala-vazia {
   color: var(--text-dim);
@@ -470,6 +496,7 @@ main {
 .board .acoes {
   grid-area: acoes;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding-top: 8px;
