@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -302,8 +302,12 @@
 
       <div class="colunas">
         <div class="coluna">
+          <!-- cada seção diz o que faz e como se opera: a tela tinha sete blocos
+               de controle e três explicações, então metade dela era adivinhação -->
           <h2 class="secao-forte">Conta</h2>
           <p class="dica" id="ajustes-email">Entrando com o Google.</p>
+          <p class="dica">O username é como a liga te identifica no app. Pra trocar, escreva o
+            novo no campo e toque em Trocar. O email vem do Google e não muda por aqui.</p>
           <form id="form-trocar-username" class="linha-form">
             <input id="novo-username" type="text" minlength="3" maxlength="20"
                    pattern="[a-zA-Z0-9_.]{3,20}" required aria-label="Novo username"
@@ -313,9 +317,15 @@
           <p id="username-troca-erro" class="erro" role="alert" hidden></p>
 
           <h2 class="secao-forte">Matérias</h2>
+          <p class="dica">Sua grade é o que faz o aviso de sala existir. O botão abre a busca da
+            planilha, onde você escolhe o dia de cada disciplina. Pra tirar um dia ou remover a
+            matéria inteira, é em Minhas aulas.</p>
           <button class="botao-raso" data-vai="materias">Adicionar disciplinas</button>
 
           <h2 class="secao-forte">Avisos de sala</h2>
+          <p class="dica">O interruptor inscreve ESTE aparelho, um por navegador: ligar no
+            iPhone não liga no notebook. O teste manda um aviso de verdade e só confirma quando
+            ele chega no aparelho.</p>
           <label class="linha-switch" for="chk-push">
             <span id="push-rotulo" class="linha-switch-texto">Avisos neste aparelho</span>
             <input type="checkbox" id="chk-push" class="switch" role="switch">
@@ -337,6 +347,8 @@
 
         <div class="coluna">
           <h2 class="secao-forte">Aparência</h2>
+          <p class="dica">Sistema acompanha o tema do aparelho e muda sozinho de dia pra noite.
+            Claro e escuro mandam no app inteiro, sempre.</p>
           <div id="tema" class="segmentado" role="radiogroup" aria-label="Tema do app">
             <button type="button" data-tema="sistema" role="radio" aria-checked="true">Sistema</button>
             <button type="button" data-tema="claro" role="radio" aria-checked="false">Claro</button>
@@ -345,6 +357,8 @@
           <p class="dica">Fica guardado só neste aparelho.</p>
 
           <h2 class="secao-forte">Reportar problema</h2>
+          <p class="dica">Escreva o que aconteceu e toque em Enviar. Chega no painel da liga com
+            seu username junto, então dá pra te procurar se faltar detalhe.</p>
           <form id="form-reclamacao" class="linha-form">
             <input id="reclamacao-input" type="text" maxlength="500"
                    placeholder="Descreva o problema" required aria-label="Descrição do problema">
@@ -355,7 +369,8 @@
 
           <h2 class="secao-forte">Seus dados</h2>
           <p class="dica">Exportar traz perfil, matérias, aparelhos com aviso e reclamações, em
-            JSON. Excluir apaga tudo isso na hora, sem volta.</p>
+            JSON, num arquivo que baixa na hora. Excluir apaga tudo isso, sem volta, e pede
+            confirmação no próprio botão antes de fazer.</p>
           <div class="acoes-conta">
             <button id="btn-export" class="botao-raso">Exportar meus dados</button>
             <button id="btn-excluir" class="botao-raso perigo">Excluir minha conta</button>
@@ -367,6 +382,8 @@
           </p>
 
           <h2 class="secao-forte">Ajuda</h2>
+          <p class="dica">As duas páginas abrem fora do app: o que o IBSALA guarda de você, de
+            onde vem o mapa de salas e o que a liga pode e não pode fazer.</p>
           <p class="rodape-links">
             <a class="saiba" href="privacidade.html">Política de Privacidade →</a>
             <a class="saiba" href="termos.html">Termos de uso →</a>
@@ -417,6 +434,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=31"></script>
+  <script type="module" src="app.js?v=32"></script>
 </body>
 </html>
