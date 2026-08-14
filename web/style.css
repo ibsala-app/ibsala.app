@@ -505,6 +505,16 @@ main {
   overflow-wrap: anywhere;
 }
 
+/* meta de uma linha só: com o nome inteiro do professor e a turma dos dois
+   cursos, a linha virava três alturas em 390px e o cartão da busca passava de
+   meia tela. O texto completo fica no title. */
+.board .meta-1l {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
+
 .board .acoes {
   grid-area: acoes;
   display: flex;

@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=27'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=28'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -616,6 +616,30 @@ async function buscar(termo, tela) {
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
 
+// A meta da linha estourava em duas e três alturas no celular: "hoje · 07:30/09:20
+// · 4 ENG/4 E.COMP · SERGIO LUIZ ARAUJO VIEIRA" não cabe em 390px de jeito
+// nenhum. Encurtar é melhor que deixar quebrar, e o texto inteiro fica no `title`
+// pra quem quiser conferir. O `hoje ·` some porque o cartão já está na lista de
+// hoje. Nada disto toca no que a busca CASA: `bate()` continua olhando o campo
+// cru da planilha.
+function nomeCurto(nome) {
+  const partes = String(nome ?? '').trim().split(/\s+/).filter(Boolean)
+  if (partes.length < 2) return partes[0] ?? ''
+  return `${partes[0][0]}. ${partes[partes.length - 1]}`
+}
+// "4 ENG/4 E.COMP" é a mesma turma escrita duas vezes, uma por curso
+const turmaCurta = (t) => String(t ?? '').split('/')[0].trim()
+
+// a meta cabe numa linha só, com reticências quando não couber, e o texto
+// completo vai no title
+function metaEnxuta(el, completa) {
+  const span = el.querySelector('.meta')
+  if (!span) return el
+  span.classList.add('meta-1l')
+  span.title = completa
+  return el
+}
+
 // `tela.adicionar` é o que separa consulta de cadastro: na Planilha dinâmica o
 // cartão é só informação, e o bloco de pílulas só existe na tela de Adicionar
 // disciplinas. O `perfil` continua sendo exigido porque insert sem sessão o
@@ -624,7 +648,8 @@ function cardAula(r, { adicionar } = {}) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
-    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}</span>`)
+    <span class="meta">${esc(r.horario)} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
+  metaEnxuta(el, `hoje · ${r.horario} · ${r.turma} · ${r.professor}`)
   if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
   return el
 }
@@ -637,7 +662,8 @@ function cardCatalogo(r, { adicionar } = {}) {
   // não sei a sala", que é informação de verdade.
   const el = li(`
     <span class="disc">${esc(r.disciplina)}</span>
-    <span class="meta">${situacao} · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
+    <span class="meta">${situacao} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
+  metaEnxuta(el, `${situacao} · ${r.turma} · ${r.professor} · ${r.codigo}`)
   if (adicionar && perfil) el.append(acoesAdicionar(r))
   return el
 }
@@ -1348,7 +1374,8 @@ function agruparMaterias(linhas) {
 function blocoMateria(g) {
   const el = li(`
     <span class="disc">${esc(g.disciplina)}</span>
-    <span class="meta">${esc(g.turma)} · ${esc(g.professor ?? '')} · ${esc(g.codigo)}</span>`)
+    <span class="meta">${esc(turmaCurta(g.turma))} · ${esc(nomeCurto(g.professor))}</span>`)
+  metaEnxuta(el, `${g.turma} · ${g.professor ?? ''} · ${g.codigo}`)
 
   const dias = document.createElement('span')
   dias.className = 'dias'
