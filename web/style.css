@@ -356,6 +356,12 @@ main {
 .painel-cabeca .linha-switch { margin-top: 18px; }
 .painel-cabeca #livres-turnos { padding-top: 6px; }
 
+/* "Enviar aviso de teste" é um botão solto entre dois cards de interruptor, e
+   encostava no de baixo: sem faixa de respiro ele parecia parte do card de
+   emails, que é outro assunto */
+#btn-push-teste { margin-top: 6px; }
+#push-teste-status + .linha-switch { margin-top: 20px; }
+
 .sala-chip {
   font-size: var(--t-sm);
   font-weight: 600;
