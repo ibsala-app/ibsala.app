@@ -350,6 +350,12 @@ main {
 #livres-turnos .turno-cabeca:first-child { margin-top: 6px; }
 #livres-turnos .grade-salas { padding-top: 8px; }
 
+/* o interruptor é um card dentro de outro card, e sem margem ele encostava nos
+   chips de sala em cima e na borda do painel embaixo. Escopado no painel pra não
+   mexer nos switches de Ajustes, que já têm o espaçamento das `.dica`. */
+.painel-cabeca .linha-switch { margin-top: 18px; }
+.painel-cabeca #livres-turnos { padding-top: 6px; }
+
 .sala-chip {
   font-size: var(--t-sm);
   font-weight: 600;
@@ -492,18 +498,14 @@ main {
 /* a fila ocupa a linha inteira e o botão desce pra linha de baixo: dividindo a
    largura com ele, as pílulas quebravam em duas fileiras e o botão saía com o
    texto partido no meio ("Adicionar / na QUI") */
-/* aqui a fila é filha do `.acoes` (flex), não do grid da linha: o `grid-area` da
-   regra acima não vale, e o respiro quem dá é o próprio `.acoes`. Seis colunas
-   iguais em vez de flex com quebra: apertando o padding a fila ainda saía 5 + 1
-   em 390px, e a sexta pílula sozinha numa segunda fileira é a "linha estourando"
-   que aparece no print. Com o grid, os seis dias dividem a largura e a fila é
-   uma linha só em qualquer tela. */
-.acoes .dias-escolha {
+/* Seis colunas iguais em vez de flex com quebra: apertando o padding a fila
+   ainda saía 5 + 1 em 390px, e a sexta pílula sozinha numa segunda fileira é a
+   "linha estourando" que apareceu no print. Com o grid, os seis dias dividem a
+   largura e a fila é uma linha só em qualquer tela. */
+.board .dias-escolha {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  flex: 1 1 100%;
   gap: 4px;
-  padding-top: 0;
 }
 
 .pill-escolha {
@@ -513,12 +515,6 @@ main {
   gap: 3px;
   font-size: var(--t-xs);
   letter-spacing: .02em;
-}
-
-.pill-escolha.escolhida {
-  color: var(--sobre-azul);
-  background: var(--blue-2);
-  border-color: var(--blue-2);
 }
 
 /* o cinza mais claro reprovava no contraste (4,47:1 no tema claro), então o "já
@@ -551,6 +547,8 @@ main {
   overflow-wrap: normal;
 }
 
+/* sobrou pro painel do admin (Resolver, Bloquear): a busca e as matérias
+   deixaram de ter botão na linha */
 .board .acoes {
   grid-area: acoes;
   display: flex;
@@ -596,7 +594,9 @@ main {
 .busca-wrap { display: block; padding-top: 16px; }
 
 /* a lista de resultados não pode encostar no campo de busca */
-#busca-lista { margin-top: 14px; }
+/* a tela de adicionar disciplinas nasceu sem este par e o cartão do primeiro
+   resultado encostava no campo de busca */
+#busca-lista, #adicionar-lista { margin-top: 14px; }
 
 .rotulo-campo {
   display: block;
@@ -1098,7 +1098,9 @@ body.bloqueado .rodape { display: none; }
      acompanha: com 560 no campo e 1044 na lista, a borda do campo caía no meio
      dos resultados */
   .busca-wrap, #busca-lista, #busca-dica, #busca-vazio,
-  #busca-falha, #busca-sem-mapa, #cta-conta { max-width: 720px; }
+  #busca-falha, #busca-sem-mapa, #cta-conta,
+  #adicionar-lista, #adicionar-dica, #adicionar-vazio,
+  #adicionar-falha, #adicionar-sem-mapa { max-width: 720px; }
 }
 
 /* mouse tem mira melhor que dedo: linha mais compacta e herói menos dramático.

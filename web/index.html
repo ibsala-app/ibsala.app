@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=32">
+  <link rel="stylesheet" href="style.css?v=33">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -196,8 +196,8 @@
         <input id="adicionar-input" type="search" placeholder="Disciplina, professor, código ou sala"
                autocomplete="off" enterkeyhint="search">
       </label>
-      <p id="adicionar-dica" class="vazio">Digite duas letras, escolha o dia da semana em que você
-        tem essa aula e toque em adicionar. O dia que já está na sua lista vem marcado.</p>
+      <p id="adicionar-dica" class="vazio">Digite duas letras e toque no dia da semana em que você
+        tem essa aula. Ela entra na hora, e o dia que já está na sua lista vem marcado.</p>
       <p id="adicionar-sem-mapa" class="falha" role="alert" hidden>O mapa de hoje não carregou,
         então não sei quais destas têm aula agora. Adicionar continua funcionando.
         <button class="mini" data-recarregar>Recarregar</button>
@@ -281,9 +281,9 @@
             <p id="materias-falha" class="falha" role="alert" hidden>Não deu pra carregar suas
               matérias. Puxa a tela pra baixo ou recarrega a página.</p>
             <p id="materias-vazio" class="vazio" hidden>Você ainda não tem matéria nenhuma.
-              Toque em Adicionar matérias, busque a disciplina e escolha o dia da semana. Cada
-              matéria vira um bloco só, com uma pílula por dia: o × tira o dia, o Remover tira a
-              matéria.</p>
+              Toque em Adicionar matérias, busque a disciplina e toque no dia da semana. Cada
+              matéria vira um bloco só, com uma pílula por dia: o × tira aquele dia, e tirar o
+              último tira a matéria.</p>
             <button id="materias-cta" class="btn-menu primario" data-vai="materias" hidden>Adicionar matérias</button>
           </div>
         </div>
@@ -434,6 +434,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=32"></script>
+  <script type="module" src="app.js?v=33"></script>
 </body>
 </html>
