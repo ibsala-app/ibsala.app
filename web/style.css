@@ -269,6 +269,18 @@ main {
   padding-top: 6px;
 }
 
+/* segunda parte do título: "Planilha dinâmica" é o nome do arquivo da faculdade
+   e não diz o que a tela faz. Fica em linha própria, mais leve, pra explicar sem
+   competir com o h1 */
+.titulo-sub {
+  display: block;
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-dim);
+  padding-top: 2px;
+}
+
 /* o título recebe foco por programa quando a tela troca, pra o leitor de tela
    acompanhar; anel não entra porque título não é controle operável, e o anel
    aparecia como uma caixa dourada em volta do h1 a cada navegação */

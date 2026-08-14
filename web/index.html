@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -143,7 +143,10 @@
     <!-- PLANILHA DINÂMICA -->
     <section id="tela-buscar" class="tela">
       <button class="voltar" data-vai="home">← Voltar</button>
-      <h1 class="tela-titulo" data-cabeca tabindex="-1">Planilha dinâmica</h1>
+      <!-- "Planilha dinâmica" é o nome que a faculdade usa pro arquivo, e sozinho
+           não diz o que a tela faz: a segunda parte do título é o verbo -->
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Planilha dinâmica
+        <span class="titulo-sub">(buscar agora)</span></h1>
 
       <label class="busca-wrap">
         <span class="rotulo-campo">Buscar na planilha da faculdade</span>
@@ -154,7 +157,7 @@
         primeiro, com sala e horário; o resto aparece como catálogo.</p>
       <p id="busca-sem-mapa" class="falha" role="alert" hidden>O mapa de hoje não carregou, então
         não sei quais destas têm aula agora.
-        <button id="btn-recarregar" class="mini">Recarregar</button>
+        <button class="mini" data-recarregar>Recarregar</button>
       </p>
       <p id="busca-falha" class="falha" role="alert" hidden>A busca não respondeu.
         <button id="btn-busca-retry" class="mini">Tentar de novo</button>
@@ -165,6 +168,37 @@
         capturado do mapa oficial, e sala e horário existem para as aulas de hoje.</p>
       <p id="cta-conta" class="cta-suave">Com conta, o IBSALA manda a sala de cada aula sua no
         celular ~50 min antes do horário. <button class="link-botao" data-vai="conta" data-intencao="criar">Criar conta</button></p>
+    </section>
+
+    <!-- ADICIONAR DISCIPLINAS -->
+    <!-- Tela separada da Planilha dinâmica de propósito: lá se consulta, aqui se
+         monta a grade. Com as duas coisas na mesma tela, quem só queria saber
+         onde é uma aula levava um bloco de pílulas e um botão de cadastro em
+         cada resultado. -->
+    <section id="tela-materias" class="tela">
+      <button class="voltar" data-vai="conta">← Voltar</button>
+      <h1 class="tela-titulo" data-cabeca tabindex="-1">Adicionar disciplinas</h1>
+
+      <label class="busca-wrap">
+        <span class="rotulo-campo">Buscar na planilha da faculdade</span>
+        <input id="adicionar-input" type="search" placeholder="Disciplina, professor, código ou sala"
+               autocomplete="off" enterkeyhint="search">
+      </label>
+      <p id="adicionar-dica" class="vazio">Digite duas letras, escolha o dia da semana em que você
+        tem essa aula e toque em adicionar. O dia que já está na sua lista vem marcado.</p>
+      <p id="adicionar-sem-mapa" class="falha" role="alert" hidden>O mapa de hoje não carregou,
+        então não sei quais destas têm aula agora. Adicionar continua funcionando.
+        <button class="mini" data-recarregar>Recarregar</button>
+      </p>
+      <p id="adicionar-falha" class="falha" role="alert" hidden>A busca não respondeu.
+        <button id="btn-adicionar-retry" class="mini">Tentar de novo</button>
+      </p>
+      <p id="adicionar-status" role="status" class="so-leitor"></p>
+      <ol id="adicionar-lista" class="board"></ol>
+      <p id="adicionar-vazio" class="vazio" hidden>Nada encontrado. A busca cobre o catálogo
+        capturado do mapa oficial.</p>
+      <p class="dica">As matérias que você já tem ficam em Minhas aulas, e é lá que você tira
+        um dia ou remove a matéria inteira.</p>
     </section>
 
     <!-- CONTA -->
@@ -235,9 +269,10 @@
             <p id="materias-falha" class="falha" role="alert" hidden>Não deu pra carregar suas
               matérias. Puxa a tela pra baixo ou recarrega a página.</p>
             <p id="materias-vazio" class="vazio" hidden>Você ainda não tem matéria nenhuma.
-              Busque a disciplina na planilha e adicione com o dia da semana. Cada matéria vira
-              um bloco só, com uma pílula por dia: o × tira o dia, o Remover tira a matéria.</p>
-            <button id="materias-cta" class="btn-menu primario" data-vai="buscar" hidden>Adicionar matérias</button>
+              Toque em Adicionar matérias, busque a disciplina e escolha o dia da semana. Cada
+              matéria vira um bloco só, com uma pílula por dia: o × tira o dia, o Remover tira a
+              matéria.</p>
+            <button id="materias-cta" class="btn-menu primario" data-vai="materias" hidden>Adicionar matérias</button>
           </div>
         </div>
 
@@ -264,6 +299,9 @@
             <button class="botao-primario">Trocar</button>
           </form>
           <p id="username-troca-erro" class="erro" role="alert" hidden></p>
+
+          <h2 class="secao-forte">Matérias</h2>
+          <button class="botao-raso" data-vai="materias">Adicionar disciplinas</button>
 
           <h2 class="secao-forte">Avisos de sala</h2>
           <label class="linha-switch" for="chk-push">
@@ -367,6 +405,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=26"></script>
+  <script type="module" src="app.js?v=27"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=26'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=27'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -65,7 +65,7 @@ const SLOTS = {
 }
 const DIAS = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
 const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO']
-const TELAS = ['home', 'agora', 'buscar', 'conta', 'ajustes', 'admin']
+const TELAS = ['home', 'agora', 'buscar', 'materias', 'conta', 'ajustes', 'admin']
 // muda junto com o texto de termos.html; é o que fica gravado em alunos
 const TERMOS_VERSAO = '1-2026-08-12'
 
@@ -200,8 +200,9 @@ function ghostChips(el, n = 12) {
 let telaAtual = 'home'
 
 // telas que só existem pra quem tem conta: digitar #ajustes deslogado abria uma
-// tela de configurações vazia, sem dizer por quê
-const TELAS_LOGADO = ['ajustes', 'admin']
+// tela de configurações vazia, sem dizer por quê. `materias` entra pelo mesmo
+// motivo: adicionar disciplina sem sessão é insert que o banco recusa.
+const TELAS_LOGADO = ['ajustes', 'materias', 'admin']
 
 function mostrar(tela, { push = true } = {}) {
   if (!TELAS.includes(tela)) tela = 'home'
@@ -477,8 +478,11 @@ function falhaNoMapa({ vazio = false } = {}) {
 on('btn-retry', 'click', (e) =>
   ocupado(e.currentTarget, () => (pronto = carregarAgora({ ghost: true }))))
 // handler em JS, nunca onclick inline: a CSP não tem 'unsafe-inline' em
-// script-src e handler inline morre calado (foi assim que a Inter não carregava)
-on('btn-recarregar', 'click', () => location.reload())
+// script-src e handler inline morre calado (foi assim que a Inter não carregava).
+// Por atributo e não por id porque agora são dois botões iguais, um em cada tela
+// de busca, e `on()` só alcança um id por vez.
+document.querySelectorAll('[data-recarregar]').forEach((b) =>
+  b.addEventListener('click', () => location.reload()))
 
 // ── Trava do site (o botão do admin agora vale de verdade) ───────────────────
 function aplicarTrava() {
@@ -493,19 +497,34 @@ function aplicarTrava() {
   }
 }
 
-// ── Planilha dinâmica ────────────────────────────────────────────────────────
-let buscaTimer
-// duas buscas em voo e a mais VELHA chegando depois sobrescreviam a nova: quem
-// digitava "sist" e completava "sistemas embarcados" via a lista voltar
-let seqBusca = 0
-on('busca-input', 'input', (e) => {
-  clearTimeout(buscaTimer)
-  const termo = e.target.value.trim()
-  buscaTimer = setTimeout(() => buscar(termo), 300)
-})
+// ── Busca na planilha (duas telas, um motor) ─────────────────────────────────
+// A mesma busca serve a Planilha dinâmica (consulta pura) e a Adicionar
+// disciplinas (monta a grade). O que separa as duas é `adicionar`: sem ele o
+// resultado não ganha pílula de dia nem botão, e a tela vira só leitura.
+// Cada tela tem seu contador de sequência, senão digitar numa cancela a outra.
+const BUSCAS = {
+  buscar: {
+    input: 'busca-input', retry: 'btn-busca-retry', lista: 'busca-lista',
+    dica: 'busca-dica', falha: 'busca-falha', semMapa: 'busca-sem-mapa',
+    vazio: 'busca-vazio', status: 'busca-status', adicionar: false, seq: 0,
+  },
+  materias: {
+    input: 'adicionar-input', retry: 'btn-adicionar-retry', lista: 'adicionar-lista',
+    dica: 'adicionar-dica', falha: 'adicionar-falha', semMapa: 'adicionar-sem-mapa',
+    vazio: 'adicionar-vazio', status: 'adicionar-status', adicionar: true, seq: 0,
+  },
+}
 
-on('btn-busca-retry', 'click', (e) =>
-  ocupado(e.currentTarget, () => buscar($('busca-input').value.trim())))
+for (const tela of Object.values(BUSCAS)) {
+  let timer
+  on(tela.input, 'input', (e) => {
+    clearTimeout(timer)
+    const termo = e.target.value.trim()
+    timer = setTimeout(() => buscar(termo, tela), 300)
+  })
+  on(tela.retry, 'click', (e) =>
+    ocupado(e.currentTarget, () => buscar($(tela.input).value.trim(), tela)))
+}
 
 // `sala_canon` entra: o placeholder promete busca por sala, mas só o rótulo cru
 // da planilha era olhado, então procurar "P2-202" (o número que está na porta)
@@ -515,29 +534,29 @@ const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_c
 
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
-async function buscar(termo) {
-  const lista = $('busca-lista')
-  $('busca-falha').hidden = true
+async function buscar(termo, tela) {
+  const lista = $(tela.lista)
+  $(tela.falha).hidden = true
   if (termo.length < 2) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-sem-mapa').hidden = true
-    $('busca-dica').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.semMapa).hidden = true
+    $(tela.dica).hidden = false
     return
   }
-  $('busca-dica').hidden = true
+  $(tela.dica).hidden = true
   // sem o bundle não existe busca: antes disto a dica sumia ao digitar, o
   // `sb.from` lançava, e sobravam quatro esqueletos pulsando pra sempre
   if (!sb) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-falha').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.falha).hidden = false
     return
   }
   ghostLinhas(lista, 4)
-  const meu = ++seqBusca
+  const meu = ++tela.seq
   await pronto            // sem isto a primeira busca da sessão marca tudo "sem aula hoje"
-  if (meu !== seqBusca) return
+  if (meu !== tela.seq) return
 
   const alvo = termo.toLowerCase()
   // 1) o mapa de hoje responde onde e quando, inclusive reserva sem código
@@ -563,32 +582,32 @@ async function buscar(termo) {
     .select('codigo,turma,disciplina,professor')
     .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)
     .limit(30))
-  if (meu !== seqBusca) return
+  if (meu !== tela.seq) return
   // o `return` seco deixava os quatro esqueletos pulsando pra sempre e o toast
   // sumia em 3,2s: o aluno ficava olhando um fantasma sem explicação nenhuma
   if (error) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-sem-mapa').hidden = true
-    $('busca-falha').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.semMapa).hidden = true
+    $(tela.falha).hidden = false
     return
   }
   const semAulaHoje = (data ?? []).filter((r) => !codigosHoje.has(r.codigo))
     .sort((a, b) => String(a.disciplina).localeCompare(String(b.disciplina), 'pt-BR'))
 
   const cards = [
-    ...linhasHoje.map((r) => cardAula(r)),
-    ...semAulaHoje.map((r) => cardCatalogo(r)),
+    ...linhasHoje.map((r) => cardAula(r, tela)),
+    ...semAulaHoje.map((r) => cardCatalogo(r, tela)),
   ]
   lista.removeAttribute('aria-busy')
   lista.replaceChildren(...cards)
-  $('busca-status').textContent = cards.length
+  $(tela.status).textContent = cards.length
     ? `${cards.length} ${cards.length === 1 ? 'resultado' : 'resultados'}`
     : 'nada encontrado'
-  $('busca-vazio').hidden = cards.length > 0
+  $(tela.vazio).hidden = cards.length > 0
   // sem mapa carregado a busca NÃO afirma nada sobre hoje: dizer "sem aula hoje"
   // pra aula que está acontecendo é pior que dizer "não sei"
-  $('busca-sem-mapa').hidden = mapaCarregado || cards.length === 0
+  $(tela.semMapa).hidden = mapaCarregado || cards.length === 0
 }
 
 // O chip mostra a sala CANÔNICA quando o repertório resolveu, e o rótulo cru da
@@ -597,16 +616,20 @@ async function buscar(termo) {
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
 
-function cardAula(r) {
+// `tela.adicionar` é o que separa consulta de cadastro: na Planilha dinâmica o
+// cartão é só informação, e o bloco de pílulas só existe na tela de Adicionar
+// disciplinas. O `perfil` continua sendo exigido porque insert sem sessão o
+// banco recusa, e um botão que sempre falha é pior que botão nenhum.
+function cardAula(r, { adicionar } = {}) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
     <span class="sala">${esc(chipSala(r))}</span>
     <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}</span>`)
-  if (perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
+  if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
   return el
 }
 
-function cardCatalogo(r) {
+function cardCatalogo(r, { adicionar } = {}) {
   const situacao = mapaCarregado ? 'sem aula hoje' : 'mapa de hoje indisponível'
   // sem o quadrado cinza com traço: aqui ele não significava nada (a meta já diz
   // "sem aula hoje") e ainda deixava a lista com dois tratamentos de sala lado a
@@ -615,7 +638,7 @@ function cardCatalogo(r) {
   const el = li(`
     <span class="disc">${esc(r.disciplina)}</span>
     <span class="meta">${situacao} · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
-  if (perfil) el.append(acoesAdicionar(r))
+  if (adicionar && perfil) el.append(acoesAdicionar(r))
   return el
 }
 
@@ -746,6 +769,9 @@ async function carregarPerfil() {
     perfil = null
     perfilDesconhecido = false
     limparDadosNaTela()
+    // sair estando em Ajustes (ou na tela de adicionar disciplina) deixava a
+    // pessoa parada numa tela que só existe com conta, sem dizer por quê
+    if (TELAS_LOGADO.includes(telaAtual)) mostrar('home')
     mostrarConta()
     aplicarTrava()
     return
@@ -1254,8 +1280,9 @@ on('form-username', 'submit', (e) => {
     toast(`Bem-vindo/a, ${u}! Agora monte sua grade.`)
     await carregarPerfil()
     // passo 3 é onde o app começa a servir pra alguma coisa; sem empurrão, 7
-    // dos 17 cadastrados pararam exatamente aqui
-    if (!minhas.length) mostrar('buscar')
+    // dos 17 cadastrados pararam exatamente aqui. Vai pra tela de adicionar, que
+    // é a única das duas buscas que monta a grade.
+    if (!minhas.length) mostrar('materias')
   })
 })
 
