@@ -707,6 +707,15 @@ select.mini { padding-right: 8px; }
     filter .42s ease, opacity .42s ease;
 }
 
+/* segunda linha do botão, no mesmo tom do rótulo (nunca opacity em texto, que é
+   como o contraste se perde sem ninguém ver) */
+.btn-sub {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  padding-top: 1px;
+}
+
 .btn-menu.primario {
   color: var(--sobre-ouro);
   background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dim) 100%);

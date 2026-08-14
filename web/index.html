@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=33">
+  <link rel="stylesheet" href="style.css?v=34">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -99,7 +99,10 @@
            aluno logado via o rótulo errado por um instante e às vezes tocava
            nele. Quem destrava é o app.js, com teto de tempo. -->
       <nav class="menu" id="menu-home" aria-label="Principal" data-carregando inert>
-        <button class="btn-menu primario" data-vai="buscar">Planilha dinâmica</button>
+        <!-- mesma segunda parte do título da tela: "Planilha dinâmica" é o nome
+             do arquivo da faculdade e sozinho não diz o que o botão faz -->
+        <button class="btn-menu primario" data-vai="buscar">Planilha dinâmica
+          <span class="btn-sub">(buscar agora)</span></button>
         <button class="btn-menu" data-vai="agora">Faculdade agora</button>
         <button id="btn-menu-entrar" class="btn-menu" data-vai="conta" data-intencao="entrar">Entrar</button>
         <button id="btn-menu-criar" class="btn-menu menor" data-vai="conta" data-intencao="criar">Criar conta</button>
@@ -434,6 +437,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=33"></script>
+  <script type="module" src="app.js?v=34"></script>
 </body>
 </html>
