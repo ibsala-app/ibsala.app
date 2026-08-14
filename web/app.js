@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=37'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=38'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -143,6 +143,27 @@ aplicarTema(temaGuardado())
 
 // ── UI helpers ───────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id)
+
+// ── Casca da última sessão ───────────────────────────────────────────────────
+// Abrir o app era uma sequência de solavancos: o menu nascia com quatro botões e
+// perdia o "Criar conta" quando a sessão resolvia, a pill de alunos aparecia do
+// nada e empurrava a linha, e o número de livres pulava de "—" pro valor. Tudo
+// isso é dado que o aparelho JÁ VIU na última visita. Guardar o último valor e
+// pintar a tela com ele, borrado, no primeiro quadro, deixa o tamanho final
+// pronto antes de a rede responder: quando o dado chega, o borrado sai e nada se
+// mexe. Borrado, e não nítido, porque o valor é do passado até a rede confirmar.
+const CASCA_CHAVE = 'ibsala:casca'
+function lerCasca() {
+  try { return JSON.parse(localStorage.getItem(CASCA_CHAVE) ?? '{}') ?? {} } catch { return {} }
+}
+function gravarCasca(campos) {
+  try { localStorage.setItem(CASCA_CHAVE, JSON.stringify({ ...lerCasca(), ...campos })) } catch { /* privada */ }
+}
+// pill que mostra valor da última sessão: sai do vulto quando o dado de verdade
+// chega, com a mesma transição do menu da home
+function vulto(id, ligado) {
+  $(id)?.classList.toggle('vulto', ligado)
+}
 
 // Um id que sumiu (rename entre deploys, HTML novo com JS velho) matava o
 // módulo inteiro na primeira linha: eram 17 addEventListener no nível do
@@ -456,6 +477,8 @@ function pintarAgora() {
     ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
     : 'fora do horário de aulas'
   $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.length} salas`
+  vulto('pill-livres', false)
+  if (slot) gravarCasca({ livres: livres.length })
 
   const grade = $('livres-grade')
   $('livres-vazio').hidden = !slot || livres.length > 0
@@ -485,6 +508,8 @@ function pintarAgora() {
   $('pill-alunos').hidden = !totalAlunos
   if (totalAlunos) {
     $('pill-alunos').textContent = `${totalAlunos} ${totalAlunos === 1 ? 'aluno' : 'alunos'}`
+    vulto('pill-alunos', false)
+    gravarCasca({ alunos: totalAlunos })
   }
 
   // frescor à vista: número sem hora não diz se é de agora ou das 3 da manhã
@@ -504,6 +529,8 @@ function pintarAgora() {
       : `mapa de ${quando.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', ...tz })}, ${hora}`
     $('pill-frescor').classList.toggle('pill-ouro', !deHoje)
     $('pill-frescor').classList.toggle('pill-fraco', deHoje)
+    vulto('pill-frescor', false)
+    gravarCasca({ frescor: $('pill-frescor').textContent })
   }
 }
 
@@ -840,6 +867,9 @@ function mostrarConta() {
   // logado, os dois botões de conta colapsam num só
   $('btn-menu-entrar').textContent = logado ? `Minhas aulas (${perfil.username})` : 'Entrar'
   $('btn-menu-criar').hidden = logado
+  // a próxima abertura já nasce com o menu do tamanho certo: sem isto o quarto
+  // botão existia por meio segundo e sumia, empurrando a home inteira
+  gravarCasca({ username: logado ? perfil.username : null })
   if (cadastrando) {
     mostrar('conta')                     // volta do OAuth cai no passo pendente
     $('username-input').focus({ preventScroll: true })
@@ -1559,6 +1589,36 @@ if (TELAS.includes(telaInicial) && telaInicial !== 'home') mostrar(telaInicial, 
 
 procurarAtualizacao()
 pintarRelogio()          // cabeçalho vivo desde o primeiro quadro, sem esperar rede
+
+// A casca da última sessão entra ANTES de qualquer rede: é ela que dá à tela o
+// tamanho final no primeiro quadro. Cada peça aqui é uma que crescia, aparecia
+// ou sumia quando o dado chegava.
+;(() => {
+  const casca = lerCasca()
+  if (casca.username) {
+    // menu já nasce com três botões, do jeito que vai ficar
+    $('btn-menu-entrar').textContent = `Minhas aulas (${casca.username})`
+    $('btn-menu-criar').hidden = true
+  }
+  if (typeof casca.alunos === 'number') {
+    $('pill-alunos').textContent = `${casca.alunos} ${casca.alunos === 1 ? 'aluno' : 'alunos'}`
+    $('pill-alunos').hidden = false
+    vulto('pill-alunos', true)
+  }
+  // o hero de "Faculdade agora" fica FORA da casca de propósito: ali o número é
+  // a resposta inteira da tela, e um valor velho, mesmo borrado, é o tipo de
+  // afirmação sem base que o app passou a auditoria de 12/08 inteira tirando.
+  // A pill do cabeçalho entra porque o que ela empurra é o layout, não a decisão.
+  if (typeof casca.livres === 'number') {
+    $('pill-livres').textContent = `${casca.livres} livres`
+    vulto('pill-livres', true)
+  }
+  if (casca.frescor) {
+    $('pill-frescor').textContent = casca.frescor
+    $('pill-frescor').hidden = false
+    vulto('pill-frescor', true)
+  }
+})()
 
 if (!sb) {
   // bundle do supabase-js não chegou: em vez de a tela ficar muda com "–" e o
