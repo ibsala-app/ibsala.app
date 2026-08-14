@@ -336,6 +336,20 @@ main {
 
 .grupo-rotulo:first-child { padding-top: 0; }
 
+/* cabeçalho de cada turno na lista do resto do dia: o rótulo do turno e a conta
+   na mesma linha, mais forte que o rótulo de prédio que vem abaixo dele */
+.turno-cabeca {
+  font-size: var(--t-sm);
+  font-weight: 800;
+  color: var(--text);
+  padding: 18px 0 2px;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 14px;
+}
+
+#livres-turnos .turno-cabeca:first-child { margin-top: 6px; }
+#livres-turnos .grade-salas { padding-top: 8px; }
+
 .sala-chip {
   font-size: var(--t-sm);
   font-weight: 600;
