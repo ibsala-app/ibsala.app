@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="style.css?v=30">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -122,6 +122,14 @@
             </div>
             <div id="livres-grade" class="grade-salas" aria-live="off"></div>
             <p id="livres-vazio" class="vazio" hidden>Nenhuma sala livre neste turno.</p>
+
+            <!-- o app só sabia responder "agora": quem procura onde estudar às
+                 19h tinha que esperar as 19h pra descobrir -->
+            <label class="linha-switch" for="chk-dia-todo">
+              <span class="linha-switch-texto">Ver o resto do dia</span>
+              <input type="checkbox" id="chk-dia-todo" class="switch" role="switch">
+            </label>
+            <div id="livres-turnos" hidden></div>
           </div>
 
           <p id="agora-falha" class="falha" role="alert" hidden>Não deu pra carregar o mapa de hoje.
@@ -405,6 +413,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=29"></script>
+  <script type="module" src="app.js?v=30"></script>
 </body>
 </html>
