@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=26'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=32'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -65,7 +65,7 @@ const SLOTS = {
 }
 const DIAS = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
 const DIAS_LONGO = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO']
-const TELAS = ['home', 'agora', 'buscar', 'conta', 'ajustes', 'admin']
+const TELAS = ['home', 'agora', 'buscar', 'materias', 'conta', 'ajustes', 'admin']
 // muda junto com o texto de termos.html; é o que fica gravado em alunos
 const TERMOS_VERSAO = '1-2026-08-12'
 
@@ -200,8 +200,9 @@ function ghostChips(el, n = 12) {
 let telaAtual = 'home'
 
 // telas que só existem pra quem tem conta: digitar #ajustes deslogado abria uma
-// tela de configurações vazia, sem dizer por quê
-const TELAS_LOGADO = ['ajustes', 'admin']
+// tela de configurações vazia, sem dizer por quê. `materias` entra pelo mesmo
+// motivo: adicionar disciplina sem sessão é insert que o banco recusa.
+const TELAS_LOGADO = ['ajustes', 'materias', 'admin']
 
 function mostrar(tela, { push = true } = {}) {
   if (!TELAS.includes(tela)) tela = 'home'
@@ -370,30 +371,21 @@ function pintarRelogio() {
   }
 }
 
-function pintarAgora() {
-  pintarRelogio()
-  const slot = slotAtual()
-  const min = minutosAgora()
+// Ocupada é sobreposição de horário com a janela do turno, não "o turno do
+// primeiro horário" (o porquê está em intervaloCobreSlot).
+function livresNoSlot(chave) {
+  const s = SLOTS[chave]
+  if (!s) return []
+  const ocupadas = new Set(mapaHoje
+    .filter((r) => r.sala_canon && intervaloCobreSlot(r.horario, s))
+    .map((r) => r.sala_canon))
+  return salas.filter((x) => !ocupadas.has(x.sala))
+}
 
-  const ocupadas = new Set(
-    slot
-      ? mapaHoje.filter((r) => r.sala_canon && intervaloCobreSlot(r.horario, SLOTS[slot]))
-        .map((r) => r.sala_canon)
-      : [])
-  const livres = slot ? salas.filter((s) => !ocupadas.has(s.sala)) : []
-
-  $('livres-num').classList.remove('ghost-num')
-  $('livres-num').textContent = slot ? livres.length : '–'
-  $('livres-rotulo').textContent = slot
-    ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
-    : 'fora do horário de aulas'
-  $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.length} salas`
-
-  // chips agrupados por prédio, e todos: cortar em 40 sem avisar escondia sala
-  const grade = $('livres-grade')
-  $('livres-vazio').hidden = !slot || livres.length > 0
+// chips agrupados por prédio, e TODOS: cortar em 40 sem avisar escondia sala
+function chipsPorPredio(livres) {
   const predios = [...new Set(livres.map((s) => s.predio))].sort()
-  grade.replaceChildren(...predios.flatMap((p) => {
+  return predios.flatMap((p) => {
     const rot = document.createElement('span')
     rot.className = 'grupo-rotulo'
     rot.textContent = p
@@ -404,7 +396,71 @@ function pintarAgora() {
       return c
     })
     return [rot, ...chips]
+  })
+}
+
+// O app só sabia responder "agora", e quem procura onde estudar às 19h tinha que
+// esperar as 19h pra descobrir. O interruptor abre um bloco por turno que ainda
+// vem hoje, com a conta e as salas de cada um. Sai tudo de `mapaHoje` e `salas`,
+// que já estão na memória: nenhuma consulta nova.
+const DIA_TODO_CHAVE = 'ibsala:dia-todo'
+function pintarTurnos() {
+  const box = $('livres-turnos')
+  const ligado = !!$('chk-dia-todo')?.checked
+  box.hidden = !ligado
+  if (!ligado || !mapaCarregado) { box.replaceChildren(); return }
+
+  const atual = slotAtual()
+  const chaves = Object.keys(SLOTS)
+  // fora de horário de aula o "resto do dia" começa no próximo turno; depois do
+  // último, não há resto nenhum e dizer isso é melhor que uma lista vazia
+  const inicio = atual ?? proximoSlot(minutosAgora())?.k
+  const daqui = inicio ? chaves.slice(chaves.indexOf(inicio)) : []
+  if (!daqui.length) {
+    const p = document.createElement('p')
+    p.className = 'vazio'
+    p.textContent = 'As aulas de hoje acabaram. Isto volta a valer amanhã de manhã.'
+    box.replaceChildren(p)
+    return
+  }
+
+  box.replaceChildren(...daqui.flatMap((k) => {
+    const livres = livresNoSlot(k)
+    const cabeca = document.createElement('p')
+    cabeca.className = 'turno-cabeca'
+    cabeca.textContent = `${SLOTS[k].label}${k === atual ? ' (agora)' : ''} · ` +
+      `${livres.length} ${livres.length === 1 ? 'livre' : 'livres'}`
+    if (!livres.length) {
+      const p = document.createElement('p')
+      p.className = 'vazio'
+      p.textContent = 'Nenhuma sala livre neste turno.'
+      return [cabeca, p]
+    }
+    const grade = document.createElement('div')
+    grade.className = 'grade-salas'
+    grade.replaceChildren(...chipsPorPredio(livres))
+    return [cabeca, grade]
   }))
+}
+
+function pintarAgora() {
+  pintarRelogio()
+  const slot = slotAtual()
+  const min = minutosAgora()
+
+  const livres = slot ? livresNoSlot(slot) : []
+
+  $('livres-num').classList.remove('ghost-num')
+  $('livres-num').textContent = slot ? livres.length : '–'
+  $('livres-rotulo').textContent = slot
+    ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
+    : 'fora do horário de aulas'
+  $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.length} salas`
+
+  const grade = $('livres-grade')
+  $('livres-vazio').hidden = !slot || livres.length > 0
+  grade.replaceChildren(...chipsPorPredio(livres))
+  pintarTurnos()
 
   grade.removeAttribute('aria-busy')
   $('board-agora').removeAttribute('aria-busy')
@@ -467,6 +523,8 @@ function falhaNoMapa({ vazio = false } = {}) {
     : 'não deu pra saber quais salas estão livres'
   $('pill-livres').textContent = 'sem mapa'
   $('livres-grade').replaceChildren()
+  // sem mapa, sala nenhuma pode ser dita livre: as seções por turno somem junto
+  pintarTurnos()
   $('board-agora').replaceChildren()
   $('agora-vazio').hidden = true
   $('busca-sem-mapa').hidden = false
@@ -474,11 +532,21 @@ function falhaNoMapa({ vazio = false } = {}) {
   toast(vazio ? 'O mapa de hoje ainda não chegou.' : 'Não deu pra carregar o mapa de hoje.')
 }
 
+// escolha de tela, então mora no aparelho, igual ao tema
+try { $('chk-dia-todo').checked = localStorage.getItem(DIA_TODO_CHAVE) === '1' } catch { /* privada */ }
+on('chk-dia-todo', 'change', (e) => {
+  try { localStorage.setItem(DIA_TODO_CHAVE, e.target.checked ? '1' : '0') } catch { /* privada */ }
+  pintarTurnos()
+})
+
 on('btn-retry', 'click', (e) =>
   ocupado(e.currentTarget, () => (pronto = carregarAgora({ ghost: true }))))
 // handler em JS, nunca onclick inline: a CSP não tem 'unsafe-inline' em
-// script-src e handler inline morre calado (foi assim que a Inter não carregava)
-on('btn-recarregar', 'click', () => location.reload())
+// script-src e handler inline morre calado (foi assim que a Inter não carregava).
+// Por atributo e não por id porque agora são dois botões iguais, um em cada tela
+// de busca, e `on()` só alcança um id por vez.
+document.querySelectorAll('[data-recarregar]').forEach((b) =>
+  b.addEventListener('click', () => location.reload()))
 
 // ── Trava do site (o botão do admin agora vale de verdade) ───────────────────
 function aplicarTrava() {
@@ -493,19 +561,34 @@ function aplicarTrava() {
   }
 }
 
-// ── Planilha dinâmica ────────────────────────────────────────────────────────
-let buscaTimer
-// duas buscas em voo e a mais VELHA chegando depois sobrescreviam a nova: quem
-// digitava "sist" e completava "sistemas embarcados" via a lista voltar
-let seqBusca = 0
-on('busca-input', 'input', (e) => {
-  clearTimeout(buscaTimer)
-  const termo = e.target.value.trim()
-  buscaTimer = setTimeout(() => buscar(termo), 300)
-})
+// ── Busca na planilha (duas telas, um motor) ─────────────────────────────────
+// A mesma busca serve a Planilha dinâmica (consulta pura) e a Adicionar
+// disciplinas (monta a grade). O que separa as duas é `adicionar`: sem ele o
+// resultado não ganha pílula de dia nem botão, e a tela vira só leitura.
+// Cada tela tem seu contador de sequência, senão digitar numa cancela a outra.
+const BUSCAS = {
+  buscar: {
+    input: 'busca-input', retry: 'btn-busca-retry', lista: 'busca-lista',
+    dica: 'busca-dica', falha: 'busca-falha', semMapa: 'busca-sem-mapa',
+    vazio: 'busca-vazio', status: 'busca-status', adicionar: false, seq: 0,
+  },
+  materias: {
+    input: 'adicionar-input', retry: 'btn-adicionar-retry', lista: 'adicionar-lista',
+    dica: 'adicionar-dica', falha: 'adicionar-falha', semMapa: 'adicionar-sem-mapa',
+    vazio: 'adicionar-vazio', status: 'adicionar-status', adicionar: true, seq: 0,
+  },
+}
 
-on('btn-busca-retry', 'click', (e) =>
-  ocupado(e.currentTarget, () => buscar($('busca-input').value.trim())))
+for (const tela of Object.values(BUSCAS)) {
+  let timer
+  on(tela.input, 'input', (e) => {
+    clearTimeout(timer)
+    const termo = e.target.value.trim()
+    timer = setTimeout(() => buscar(termo, tela), 300)
+  })
+  on(tela.retry, 'click', (e) =>
+    ocupado(e.currentTarget, () => buscar($(tela.input).value.trim(), tela)))
+}
 
 // `sala_canon` entra: o placeholder promete busca por sala, mas só o rótulo cru
 // da planilha era olhado, então procurar "P2-202" (o número que está na porta)
@@ -515,29 +598,29 @@ const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_c
 
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
-async function buscar(termo) {
-  const lista = $('busca-lista')
-  $('busca-falha').hidden = true
+async function buscar(termo, tela) {
+  const lista = $(tela.lista)
+  $(tela.falha).hidden = true
   if (termo.length < 2) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-sem-mapa').hidden = true
-    $('busca-dica').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.semMapa).hidden = true
+    $(tela.dica).hidden = false
     return
   }
-  $('busca-dica').hidden = true
+  $(tela.dica).hidden = true
   // sem o bundle não existe busca: antes disto a dica sumia ao digitar, o
   // `sb.from` lançava, e sobravam quatro esqueletos pulsando pra sempre
   if (!sb) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-falha').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.falha).hidden = false
     return
   }
   ghostLinhas(lista, 4)
-  const meu = ++seqBusca
+  const meu = ++tela.seq
   await pronto            // sem isto a primeira busca da sessão marca tudo "sem aula hoje"
-  if (meu !== seqBusca) return
+  if (meu !== tela.seq) return
 
   const alvo = termo.toLowerCase()
   // 1) o mapa de hoje responde onde e quando, inclusive reserva sem código
@@ -563,32 +646,32 @@ async function buscar(termo) {
     .select('codigo,turma,disciplina,professor')
     .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)
     .limit(30))
-  if (meu !== seqBusca) return
+  if (meu !== tela.seq) return
   // o `return` seco deixava os quatro esqueletos pulsando pra sempre e o toast
   // sumia em 3,2s: o aluno ficava olhando um fantasma sem explicação nenhuma
   if (error) {
     lista.replaceChildren()
-    $('busca-vazio').hidden = true
-    $('busca-sem-mapa').hidden = true
-    $('busca-falha').hidden = false
+    $(tela.vazio).hidden = true
+    $(tela.semMapa).hidden = true
+    $(tela.falha).hidden = false
     return
   }
   const semAulaHoje = (data ?? []).filter((r) => !codigosHoje.has(r.codigo))
     .sort((a, b) => String(a.disciplina).localeCompare(String(b.disciplina), 'pt-BR'))
 
   const cards = [
-    ...linhasHoje.map((r) => cardAula(r)),
-    ...semAulaHoje.map((r) => cardCatalogo(r)),
+    ...linhasHoje.map((r) => cardAula(r, tela)),
+    ...semAulaHoje.map((r) => cardCatalogo(r, tela)),
   ]
   lista.removeAttribute('aria-busy')
   lista.replaceChildren(...cards)
-  $('busca-status').textContent = cards.length
+  $(tela.status).textContent = cards.length
     ? `${cards.length} ${cards.length === 1 ? 'resultado' : 'resultados'}`
     : 'nada encontrado'
-  $('busca-vazio').hidden = cards.length > 0
+  $(tela.vazio).hidden = cards.length > 0
   // sem mapa carregado a busca NÃO afirma nada sobre hoje: dizer "sem aula hoje"
   // pra aula que está acontecendo é pior que dizer "não sei"
-  $('busca-sem-mapa').hidden = mapaCarregado || cards.length === 0
+  $(tela.semMapa).hidden = mapaCarregado || cards.length === 0
 }
 
 // O chip mostra a sala CANÔNICA quando o repertório resolveu, e o rótulo cru da
@@ -597,16 +680,45 @@ async function buscar(termo) {
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
 
-function cardAula(r) {
-  const el = li(`
-    <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala">${esc(chipSala(r))}</span>
-    <span class="meta">hoje · ${esc(r.horario)} · ${esc(r.turma)} · ${esc(r.professor)}</span>`)
-  if (perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
+// A meta da linha estourava em duas e três alturas no celular: "hoje · 07:30/09:20
+// · 4 ENG/4 E.COMP · SERGIO LUIZ ARAUJO VIEIRA" não cabe em 390px de jeito
+// nenhum. Encurtar é melhor que deixar quebrar, e o texto inteiro fica no `title`
+// pra quem quiser conferir. O `hoje ·` some porque o cartão já está na lista de
+// hoje. Nada disto toca no que a busca CASA: `bate()` continua olhando o campo
+// cru da planilha.
+function nomeCurto(nome) {
+  const partes = String(nome ?? '').trim().split(/\s+/).filter(Boolean)
+  if (partes.length < 2) return partes[0] ?? ''
+  return `${partes[0][0]}. ${partes[partes.length - 1]}`
+}
+// "4 ENG/4 E.COMP" é a mesma turma escrita duas vezes, uma por curso
+const turmaCurta = (t) => String(t ?? '').split('/')[0].trim()
+
+// a meta cabe numa linha só, com reticências quando não couber, e o texto
+// completo vai no title
+function metaEnxuta(el, completa) {
+  const span = el.querySelector('.meta')
+  if (!span) return el
+  span.classList.add('meta-1l')
+  span.title = completa
   return el
 }
 
-function cardCatalogo(r) {
+// `tela.adicionar` é o que separa consulta de cadastro: na Planilha dinâmica o
+// cartão é só informação, e o bloco de pílulas só existe na tela de Adicionar
+// disciplinas. O `perfil` continua sendo exigido porque insert sem sessão o
+// banco recusa, e um botão que sempre falha é pior que botão nenhum.
+function cardAula(r, { adicionar } = {}) {
+  const el = li(`
+    <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
+    <span class="sala">${esc(chipSala(r))}</span>
+    <span class="meta">${esc(r.horario)} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
+  metaEnxuta(el, `hoje · ${r.horario} · ${r.turma} · ${r.professor}`)
+  if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
+  return el
+}
+
+function cardCatalogo(r, { adicionar } = {}) {
   const situacao = mapaCarregado ? 'sem aula hoje' : 'mapa de hoje indisponível'
   // sem o quadrado cinza com traço: aqui ele não significava nada (a meta já diz
   // "sem aula hoje") e ainda deixava a lista com dois tratamentos de sala lado a
@@ -614,8 +726,9 @@ function cardCatalogo(r) {
   // não sei a sala", que é informação de verdade.
   const el = li(`
     <span class="disc">${esc(r.disciplina)}</span>
-    <span class="meta">${situacao} · ${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.codigo)}</span>`)
-  if (perfil) el.append(acoesAdicionar(r))
+    <span class="meta">${situacao} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
+  metaEnxuta(el, `${situacao} · ${r.turma} · ${r.professor} · ${r.codigo}`)
+  if (adicionar && perfil) el.append(acoesAdicionar(r))
   return el
 }
 
@@ -713,6 +826,19 @@ function pintarPassos() {
   }
 }
 
+// Os botões da home nascem borrados e inertes (o do meio muda de nome conforme a
+// sessão), e destravam quando o app sabe quem é você. Três gatilhos, porque
+// deixar a home travada é pior que destravar cedo: sem bundle não haverá sessão
+// nenhuma; o perfil resolvido é o caso normal; e o teto de tempo cobre a rede
+// que pendura sem avisar, que é o mesmo motivo do `comTeto`.
+function destravarMenu() {
+  const menu = $('menu-home')
+  if (!menu || !menu.hasAttribute('data-carregando')) return
+  menu.removeAttribute('data-carregando')
+  menu.removeAttribute('inert')
+}
+setTimeout(destravarMenu, 2500)
+
 function mostrarConta() {
   const logado = !!(sessao && perfil)
   const cadastrando = !!(sessao && !perfil && !perfilDesconhecido)
@@ -730,6 +856,8 @@ function mostrarConta() {
     mostrar('conta')                     // volta do OAuth cai no passo pendente
     $('username-input').focus({ preventScroll: true })
   }
+  // daqui pra frente o rótulo do botão do meio é o definitivo
+  destravarMenu()
 }
 
 // A tela guardava a lista de matérias e, no admin, o email de todos os alunos.
@@ -746,6 +874,9 @@ async function carregarPerfil() {
     perfil = null
     perfilDesconhecido = false
     limparDadosNaTela()
+    // sair estando em Ajustes (ou na tela de adicionar disciplina) deixava a
+    // pessoa parada numa tela que só existe com conta, sem dizer por quê
+    if (TELAS_LOGADO.includes(telaAtual)) mostrar('home')
     mostrarConta()
     aplicarTrava()
     return
@@ -1254,8 +1385,9 @@ on('form-username', 'submit', (e) => {
     toast(`Bem-vindo/a, ${u}! Agora monte sua grade.`)
     await carregarPerfil()
     // passo 3 é onde o app começa a servir pra alguma coisa; sem empurrão, 7
-    // dos 17 cadastrados pararam exatamente aqui
-    if (!minhas.length) mostrar('buscar')
+    // dos 17 cadastrados pararam exatamente aqui. Vai pra tela de adicionar, que
+    // é a única das duas buscas que monta a grade.
+    if (!minhas.length) mostrar('materias')
   })
 })
 
@@ -1321,7 +1453,8 @@ function agruparMaterias(linhas) {
 function blocoMateria(g) {
   const el = li(`
     <span class="disc">${esc(g.disciplina)}</span>
-    <span class="meta">${esc(g.turma)} · ${esc(g.professor ?? '')} · ${esc(g.codigo)}</span>`)
+    <span class="meta">${esc(turmaCurta(g.turma))} · ${esc(nomeCurto(g.professor))}</span>`)
+  metaEnxuta(el, `${g.turma} · ${g.professor ?? ''} · ${g.codigo}`)
 
   const dias = document.createElement('span')
   dias.className = 'dias'
@@ -1467,6 +1600,8 @@ if (!sb) {
     'numa rede que filtra endereços, tenta pelo 4G. '
   $('conta-deslogado').hidden = true
   $('btn-retry').onclick = () => location.reload()
+  // sem bundle não vai existir sessão nenhuma pra esperar
+  destravarMenu()
 } else {
   sb.auth.onAuthStateChange((_ev, s) => {
     sessao = s
