@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=30'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=31'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -826,6 +826,19 @@ function pintarPassos() {
   }
 }
 
+// Os botões da home nascem borrados e inertes (o do meio muda de nome conforme a
+// sessão), e destravam quando o app sabe quem é você. Três gatilhos, porque
+// deixar a home travada é pior que destravar cedo: sem bundle não haverá sessão
+// nenhuma; o perfil resolvido é o caso normal; e o teto de tempo cobre a rede
+// que pendura sem avisar, que é o mesmo motivo do `comTeto`.
+function destravarMenu() {
+  const menu = $('menu-home')
+  if (!menu || !menu.hasAttribute('data-carregando')) return
+  menu.removeAttribute('data-carregando')
+  menu.removeAttribute('inert')
+}
+setTimeout(destravarMenu, 2500)
+
 function mostrarConta() {
   const logado = !!(sessao && perfil)
   const cadastrando = !!(sessao && !perfil && !perfilDesconhecido)
@@ -843,6 +856,8 @@ function mostrarConta() {
     mostrar('conta')                     // volta do OAuth cai no passo pendente
     $('username-input').focus({ preventScroll: true })
   }
+  // daqui pra frente o rótulo do botão do meio é o definitivo
+  destravarMenu()
 }
 
 // A tela guardava a lista de matérias e, no admin, o email de todos os alunos.
@@ -1585,6 +1600,8 @@ if (!sb) {
     'numa rede que filtra endereços, tenta pelo 4G. '
   $('conta-deslogado').hidden = true
   $('btn-retry').onclick = () => location.reload()
+  // sem bundle não vai existir sessão nenhuma pra esperar
+  destravarMenu()
 } else {
   sb.auth.onAuthStateChange((_ev, s) => {
     sessao = s

@@ -120,6 +120,12 @@ def main():
         ('nenhum id do JS falta no HTML', 'data-app="incompleto"' not in html),
         ('a home mostra o título', 'Salas do Ibmec BH' in html),
         ('os quatro caminhos do menu existem', html.count('class="btn-menu') >= 3),
+        # os botões da home nascem borrados e inertes até o app saber se há
+        # sessão. Numa rede que barra o backend, a sessão nunca resolve: sem o
+        # teto de tempo do destravarMenu() a home ficaria travada pra sempre,
+        # que é pior que o problema que o vulto resolve.
+        ('o menu da home destrava mesmo sem backend',
+         'data-carregando' not in html),
         ('o cabeçalho vive pelo relógio, sem servidor',
          texto_de(html, 'pill-data') not in ('', '—')),
         ('a tela de conta não fica em branco', visivel(html, 'conta-deslogado')),
