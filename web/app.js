@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=32'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=33'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -714,7 +714,7 @@ function cardAula(r, { adicionar } = {}) {
     <span class="sala">${esc(chipSala(r))}</span>
     <span class="meta">${esc(r.horario)} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
   metaEnxuta(el, `hoje · ${r.horario} · ${r.turma} · ${r.professor}`)
-  if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r, { dia: agoraBRT().getDay() }))
+  if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r))
   return el
 }
 
@@ -732,24 +732,17 @@ function cardCatalogo(r, { adicionar } = {}) {
   return el
 }
 
-// Eram dois controles diferentes pra mesma decisão: a linha do mapa de hoje
-// ganhava um botão "Adicionar na QUI" e a do catálogo um <select> nativo, sem
-// nada na tela explicando por que a forma mudava no meio da lista. Agora os dois
-// usam a mesma fila de pílulas de "Minhas matérias": o dia escolhido fica
-// visível, e o que já está na sua lista aparece marcado ANTES de você tentar (o
-// aviso de duplicado só chegava depois da ida ao servidor).
-function acoesAdicionar(r, { dia } = {}) {
-  const acoes = document.createElement('span')
-  acoes.className = 'acoes'
+// A pílula É a ação: tocar no dia adiciona a matéria naquele dia, sem segundo
+// toque. Antes eram dois passos (escolher o dia, confirmar num botão que dizia
+// "Adicionar na QUI"), e com seis pílulas mais o botão cada resultado da lista
+// ocupava quatro alturas no celular. O que já está na sua lista aparece marcado
+// ANTES de você tentar (o aviso de duplicado só chegava depois da ida ao
+// servidor). Tirar dia é só em Minhas aulas, com o × da pílula: dois lugares
+// fazendo a mesma coisa é o que esta tela acabou de deixar de ser.
+function acoesAdicionar(r) {
   const fila = document.createElement('span')
   fila.className = 'dias dias-escolha'
-  const btn = document.createElement('button')
-  btn.type = 'button'
-  btn.className = 'mini'
 
-  // linha do mapa de hoje já vem com o dia certo marcado: continua sendo um
-  // toque só. Domingo (getDay() === 0) não é dia letivo e cai no caso sem dia.
-  let escolhido = dia >= 1 && dia <= 6 ? dia : null
   const novos = new Set()
   const jaTem = (d) => novos.has(d) || minhas.some((m) => m.dia === d &&
     (r.codigo ? m.codigo === r.codigo : m.disciplina === r.disciplina))
@@ -758,18 +751,17 @@ function acoesAdicionar(r, { dia } = {}) {
     for (const p of fila.children) {
       const d = +p.dataset.dia
       const tem = jaTem(d)
-      p.classList.toggle('escolhida', d === escolhido)
       p.classList.toggle('ja-tem', tem)
       // o ✓ carrega o "já tenho" junto com a borda tracejada: dizer isso só por
       // cor mais fraca reprovava no contraste do tema claro
       p.textContent = tem ? `${DIAS[d]} ✓` : DIAS[d]
-      p.setAttribute('aria-label', tem ? `${DIAS_LONGO[d]}, já na sua lista` : DIAS_LONGO[d])
-      p.setAttribute('aria-pressed', String(d === escolhido))
+      // `aria-disabled` e não `disabled`: o atributo de verdade traz a cor cinza
+      // do próprio navegador, que sai de baixo do contraste.py
+      p.setAttribute('aria-disabled', String(tem))
+      p.setAttribute('aria-label', tem
+        ? `${DIAS_LONGO[d]}, já na sua lista`
+        : `Adicionar ${r.disciplina} na ${DIAS_LONGO[d]}`)
     }
-    if (!escolhido) btn.textContent = 'Escolha o dia'
-    else if (jaTem(escolhido)) btn.textContent = `Já na sua lista (${DIAS[escolhido]})`
-    else btn.textContent = `Adicionar na ${DIAS[escolhido]}`
-    btn.disabled = !escolhido || jaTem(escolhido)
   }
 
   for (let d = 1; d <= 6; d++) {
@@ -778,22 +770,18 @@ function acoesAdicionar(r, { dia } = {}) {
     p.className = 'pill-dia pill-escolha'
     p.dataset.dia = d
     p.textContent = DIAS[d]
-    p.setAttribute('aria-label', DIAS_LONGO[d])
-    p.addEventListener('click', () => { escolhido = d; pintar() })
+    p.addEventListener('click', async () => {
+      if (jaTem(d)) return
+      // marca a pílula na hora: `carregarMinhas` é assíncrono e a fila ficaria
+      // sem o ✓ numa matéria que já entrou
+      if (await adicionarMateria(r, d, p)) novos.add(d)
+      pintar()
+    })
     fila.append(p)
   }
 
-  btn.addEventListener('click', async () => {
-    if (!escolhido) return
-    // marca a pílula na hora: `carregarMinhas` é assíncrono e a lista da busca
-    // ficaria dizendo "Adicionar" numa matéria que já entrou
-    if (await adicionarMateria(r, escolhido, btn)) novos.add(escolhido)
-    pintar()
-  })
-
   pintar()
-  acoes.append(fila, btn)
-  return acoes
+  return fila
 }
 
 // ── Conta ────────────────────────────────────────────────────────────────────
@@ -1481,42 +1469,11 @@ function blocoMateria(g) {
     dias.append(pill)
   }
 
-  const acoes = document.createElement('span')
-  acoes.className = 'acoes'
-  const btn = document.createElement('button')
-  btn.type = 'button'
-  btn.className = 'mini'
-  btn.textContent = 'Remover'
-  // com o bloco único, um toque apaga a matéria em TODOS os dias, e isso pede
-  // confirmação. `confirm()` nativo não serve: a CSP do projeto já pune diálogo
-  // inline e na PWA do iPhone ele interrompe o app inteiro. A confirmação é o
-  // próprio botão, e ela expira sozinha em 4s pra não ficar armada na tela.
-  let armado = null
-  const desarmar = () => {
-    clearTimeout(armado)
-    armado = null
-    btn.textContent = 'Remover'
-    btn.classList.remove('perigo')
-  }
-  btn.addEventListener('click', () => {
-    if (!armado) {
-      btn.textContent = 'Remover mesmo?'
-      btn.classList.add('perigo')
-      armado = setTimeout(desarmar, 4000)
-      return
-    }
-    desarmar()
-    ocupado(btn, async () => {
-      const { error } = await chamar(sb.from('materias').delete()
-        .in('id', g.dias.map((d) => d.id)).eq('aluno_id', sessao.user.id))
-      if (error) { toast(error.msg); return }
-      toast('Matéria removida.')
-      carregarMinhas()
-    })
-  })
-  acoes.append(btn)
-
-  el.append(dias, acoes)
+  // Sem botão "Remover": `materias` guarda uma linha por (aluno, código, dia),
+  // então tirar o último × apaga a última linha e o bloco some sozinho da lista.
+  // O botão fazia isso de uma vez, com confirmação em dois toques, e era um
+  // segundo controle pra mesma coisa dentro de um bloco de três alturas.
+  el.append(dias)
   return el
 }
 
