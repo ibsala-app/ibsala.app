@@ -707,13 +707,13 @@ select.mini { padding-right: 8px; }
     filter .42s ease, opacity .42s ease;
 }
 
-/* segunda linha do botão, no mesmo tom do rótulo (nunca opacity em texto, que é
-   como o contraste se perde sem ninguém ver) */
+/* na MESMA linha, à direita do rótulo: em linha própria o botão engordava 20px
+   e virava o dobro dos vizinhos. Mesmo tom do rótulo, nunca opacity em texto,
+   que é como o contraste se perde sem ninguém ver. */
 .btn-sub {
-  display: block;
   font-size: var(--t-sm);
   font-weight: 600;
-  padding-top: 1px;
+  white-space: nowrap;
 }
 
 .btn-menu.primario {
