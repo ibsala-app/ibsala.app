@@ -701,7 +701,10 @@ select.mini { padding-right: 8px; }
   min-height: 44px;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
-  transition: background-color .14s, transform .08s, border-color .14s, box-shadow .14s;
+  /* filter e opacity em .42s são a saída do estado de carregando (o vulto vira
+     botão); o resto é o toque, que precisa ser curto */
+  transition: background-color .14s, transform .08s, border-color .14s, box-shadow .14s,
+    filter .42s ease, opacity .42s ease;
 }
 
 .btn-menu.primario {
@@ -781,6 +784,21 @@ button:disabled {
 
 /* home do v1: menu de botões grandes */
 .menu { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; }
+
+/* enquanto o app não sabe se tem sessão, os botões da home aparecem como vulto:
+   a forma e o lugar já estão lá (a tela não pula quando o dado chega), mas nada
+   é legível nem clicável. O `inert` no <nav> é quem impede toque e tab; o blur
+   só conta a história. Nada de `transform` aqui: o `.btn-menu` anima transform em
+   80ms pro toque, e esticar isso pra meio segundo deixaria o botão mole. */
+.menu[data-carregando] .btn-menu {
+  filter: blur(5px);
+  opacity: .5;
+}
+
+/* sem desfoque pra quem pediu menos animação: o vulto vira só opacidade menor */
+@media (prefers-reduced-motion: reduce) {
+  .menu[data-carregando] .btn-menu { filter: none; opacity: .55; }
+}
 
 .eyebrow {
   padding-top: 22px;
