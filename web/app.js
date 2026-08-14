@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=36'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=37'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -999,7 +999,11 @@ async function atualizarBotaoPush() {
 // e só declara sucesso quando o service worker devolve o recado de que recebeu.
 const PUSH_OK_CHAVE = 'ibsala:push-ok'
 const ESPERA_TESTE = 15000
+// o botão volta antes de o aviso chegar no aparelho, e dava pra disparar cinco
+// seguidos: cada toque é um push de verdade saindo pro FCM
+const TRAVA_TESTE = 2000
 let timerTeste = null
+let travadoAte = 0
 
 function ultimoTesteOk() {
   try { return Number(localStorage.getItem(PUSH_OK_CHAVE) ?? 0) } catch { return 0 }
@@ -1024,8 +1028,9 @@ function pintarTesteDePush() {
   const chk = $('chk-push')
   if (!btn || !chk) return
   // sem inscrição ligada não há o que testar, e o botão habilitado prometeria
-  // uma resposta que nunca viria
-  btn.disabled = !chk.checked
+  // uma resposta que nunca viria. A trava de 2s entra aqui também porque
+  // `atualizarBotaoPush` repinta o botão no meio dela.
+  btn.disabled = !chk.checked || Date.now() < travadoAte
   if (timerTeste) return
   const ok = ultimoTesteOk()
   statusTeste(ok ? `Último aviso confirmado neste aparelho ${quandoLegivel(ok)}.` : '')
@@ -1038,8 +1043,24 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
   try { localStorage.setItem(PUSH_OK_CHAVE, String(e.data.em ?? Date.now())) } catch { /* privada */ }
   statusTeste(`Aviso de teste recebido ${quandoLegivel(e.data.em ?? Date.now())}. Está funcionando.`)
 })
+// SEM ESTA LINHA a mensagem acima nunca chega. O ServiceWorkerContainer segura a
+// fila de mensagens do worker até alguém atribuir `onmessage` ou chamar
+// `startMessages()`; com `addEventListener` sozinho ela fica parada pra sempre.
+// Era isso que deixava o teste preso em "Esperando ele chegar neste aparelho"
+// COM o aviso ja na tela do celular, e o #44 subiu com esse buraco.
+navigator.serviceWorker?.startMessages?.()
 
-on('btn-push-teste', 'click', (ev) => ocupado(ev.currentTarget, async () => {
+on('btn-push-teste', 'click', async (ev) => {
+  const alvo = ev.currentTarget
+  await ocupado(alvo, () => enviarTeste())
+  // trava anti-spam: o `finally` do ocupado destrava o botão assim que o
+  // servidor responde, o que é bem antes de o aviso chegar no aparelho
+  travadoAte = Date.now() + TRAVA_TESTE
+  alvo.disabled = true
+  setTimeout(pintarTesteDePush, TRAVA_TESTE)
+})
+
+async function enviarTeste() {
   clearTimeout(timerTeste)
   statusTeste('Enviado. Esperando ele chegar neste aparelho…')
   const { data, error } = await chamar(sb.functions.invoke('push-teste', { method: 'POST' }))
@@ -1065,7 +1086,7 @@ on('btn-push-teste', 'click', (ev) => ocupado(ev.currentTarget, async () => {
       'do IBSALA está liberada nos ajustes do aparelho e, no iPhone, se o app foi aberto ' +
       'pelo ícone da Tela de Início.')
   }, ESPERA_TESTE)
-}))
+}
 
 async function salvarInscricao(sub) {
   const j = sub.toJSON()
