@@ -394,6 +394,7 @@ main {
   grid-template-areas:
     "disc  sala"
     "meta  sala"
+    "dias  dias"
     "acoes acoes";
   gap: 2px 12px;
   padding: var(--pad-linha);
@@ -438,13 +439,17 @@ main {
 /* uma matéria é UM bloco, com uma pílula por dia em que ela acontece: a lista
    repetia a mesma disciplina uma vez por dia, cada cópia com seu Remover. O ×
    tira só aquele dia; o Remover do bloco tira a matéria inteira. */
+/* faixa própria, largura inteira: na coluna da direita (que é `max-content` com
+   teto de 38%) as pílulas empilhavam uma por linha a partir do terceiro dia e
+   ainda espremiam a meta em três alturas. Deitadas, é a mesma disposição das
+   pílulas de escolha na tela de adicionar. */
 .board .dias {
-  grid-area: sala;
-  align-self: center;
+  grid-area: dias;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  padding-top: 8px;
 }
 
 .pill-dia {
@@ -473,11 +478,28 @@ main {
 /* a fila ocupa a linha inteira e o botão desce pra linha de baixo: dividindo a
    largura com ele, as pílulas quebravam em duas fileiras e o botão saía com o
    texto partido no meio ("Adicionar / na QUI") */
-.acoes .dias-escolha { justify-content: flex-start; flex: 1 1 100%; gap: 5px; }
+/* aqui a fila é filha do `.acoes` (flex), não do grid da linha: o `grid-area` da
+   regra acima não vale, e o respiro quem dá é o próprio `.acoes`. Seis colunas
+   iguais em vez de flex com quebra: apertando o padding a fila ainda saía 5 + 1
+   em 390px, e a sexta pílula sozinha numa segunda fileira é a "linha estourando"
+   que aparece no print. Com o grid, os seis dias dividem a largura e a fila é
+   uma linha só em qualquer tela. */
+.acoes .dias-escolha {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  flex: 1 1 100%;
+  gap: 4px;
+  padding-top: 0;
+}
 
-/* apertado de propósito: com o padding da pílula de "Minhas matérias" os seis
-   dias não cabiam em 390px e a fila quebrava 5 + 1 */
-.pill-escolha { min-height: 36px; padding: 5px 8px; }
+.pill-escolha {
+  min-height: 38px;
+  padding: 5px 2px;
+  justify-content: center;
+  gap: 3px;
+  font-size: var(--t-xs);
+  letter-spacing: .02em;
+}
 
 .pill-escolha.escolhida {
   color: var(--sobre-azul);
