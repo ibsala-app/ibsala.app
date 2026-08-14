@@ -882,6 +882,17 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+/* valor da última sessão, esperando a rede confirmar: ocupa o tamanho final
+   desde o primeiro quadro (é isso que tira o solavanco da abertura) e diz, pelo
+   borrado, que ainda não é dado firme */
+.vulto { filter: blur(4px); }
+.pill { transition: filter .42s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vulto { filter: none; opacity: .55; }
+  .pill { transition: opacity .2s linear; }
+}
+
 .pill-azul { color: var(--sobre-azul); background: var(--blue-2); border-color: transparent; }
 
 .pill-ouro {
