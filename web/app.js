@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=38'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=39'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -286,6 +286,9 @@ function erroLegivel(e) {
     return { tipo: 'sessao', msg: 'Sua sessão expirou. Entra de novo.' }
   }
   if (c === '42501') return { tipo: 'permissao', msg: 'Sua conta não tem permissão pra isso.' }
+  // quota por aluno (migration 0016): a mensagem já vem escrita pro aluno ler,
+  // e é a única do banco que a tela mostra como veio
+  if (c === 'P0001') return { tipo: 'limite', msg: e?.message || 'Você chegou no limite.' }
   if (c === '23514' || c === '23502') return { tipo: 'invalido', msg: 'Dado inválido.' }
   return { tipo: 'servidor', msg: 'Sem resposta do servidor. Tenta de novo.' }
 }
@@ -1290,37 +1293,42 @@ on('btn-excluir-confirma', 'click', (ev) => ocupado(ev.currentTarget, async () =
 }))
 
 // ── Admin ────────────────────────────────────────────────────────────────────
-async function carregarAdmin() {
-  const [conf, recs, todos] = await Promise.all([
-    chamar(sb.from('config').select('value').eq('key', 'travado').single()),
-    chamar(sb.from('reclamacoes').select('id,descricao,criado,alunos(username)')
-      .is('resolvido_em', null).order('criado')),
-    chamar(sb.from('alunos').select('id,username,email,role,bloqueado').order('criado')),
-  ])
+// A tela pedia TODOS os alunos e TODAS as reclamações abertas numa tacada só.
+// Isso morre em dois lugares ao mesmo tempo quando a base cresce: o PostgREST
+// corta em 1.000 linhas sem avisar (`max_rows`), então o painel simplesmente
+// deixaria de mostrar parte da base, e o payload vira o maior do app inteiro
+// numa tela que o admin abre do celular. Agora vai de 50 em 50.
+const PAGINA_ADMIN = 50
+const alunosPag = { cursor: null, busca: '' }
+const recsPag = { cursor: null }
 
-  // o painel dizia "nenhuma reclamação aberta" quando a query tinha falhado, e
-  // a lista de alunos ficava vazia sem explicação
-  const falhou = conf.error || recs.error || todos.error
-  $('admin-falha').hidden = !falhou
-  if (falhou) return
+// Paginação por chave, não `range()`: offset relê linha já lida e pula linha
+// nova quando alguém cadastra no meio da leitura, e esta é justamente a tela que
+// fica aberta enquanto gente entra. `criado` não é único, então o `id` desempata.
+const depoisDe = (q, cur) => (cur
+  ? q.or(`criado.gt.${cur.criado},and(criado.eq.${cur.criado},id.gt.${cur.id})`)
+  : q)
 
-  const travado = conf.data?.value === true
-  $('btn-trava').hidden = false
-  $('btn-trava').textContent = travado ? 'Destravar o site' : 'Travar o site'
-  $('btn-trava').onclick = () => ocupado($('btn-trava'), async () => {
-    const { error } = await chamar(
-      sb.from('config').update({ value: !travado }).eq('key', 'travado'))
-    // o estado local era mutado ANTES de saber se o servidor aceitou: o admin
-    // via a tela mudar e achava que tinha travado o site enquanto todo mundo
-    // seguia navegando
-    if (error) { toast(error.msg); return }
-    cfg.travado = !travado
-    aplicarTrava()
-    carregarAdmin()
-  })
+// vírgula, parêntese e `*` são a sintaxe do filtro `or` do PostgREST: termo cru
+// do admin viraria filtro quebrado (ou filtro que ele não escreveu)
+const termoLimpo = (t) => t.replace(/[^\w.@ -]/g, '').trim()
 
-  const lr = $('admin-reclamacoes')
-  lr.replaceChildren(...(recs.data ?? []).map((r) => {
+const paginaRecs = (cur) => chamar(
+  depoisDe(sb.from('reclamacoes')
+    .select('id,descricao,criado,alunos(username)')
+    .is('resolvido_em', null), cur)
+    .order('criado').order('id').limit(PAGINA_ADMIN))
+
+function paginaAlunos(cur) {
+  let q = sb.from('alunos').select('id,username,email,role,bloqueado,criado')
+  const t = termoLimpo(alunosPag.busca)
+  if (t.length >= 2) q = q.or(`username.ilike.*${t}*,email.ilike.*${t}*`)
+  return chamar(depoisDe(q, cur).order('criado').order('id').limit(PAGINA_ADMIN))
+}
+
+function pintarRecs(lista, juntar) {
+  const alvo = $('admin-reclamacoes')
+  const itens = lista.map((r) => {
     const el = li(`
       <span class="disc">${esc(r.descricao)}</span>
       <span class="meta">${esc(r.alunos?.username ?? '?')} · ${new Date(r.criado).toLocaleString('pt-BR')}</span>`)
@@ -1338,12 +1346,19 @@ async function carregarAdmin() {
     acoes.append(btn)
     el.append(acoes)
     return el
-  }))
-  $('admin-reclamacoes-vazio').hidden = (recs.data ?? []).length > 0
-  $('admin-alunos-vazio').hidden = (todos.data ?? []).length > 0
+  })
+  if (juntar) alvo.append(...itens)
+  else alvo.replaceChildren(...itens)
 
-  const la = $('admin-alunos')
-  la.replaceChildren(...(todos.data ?? []).map((a) => {
+  const ultima = lista[lista.length - 1]
+  if (ultima) recsPag.cursor = { criado: ultima.criado, id: ultima.id }
+  $('admin-reclamacoes-vazio').hidden = juntar || lista.length > 0
+  $('btn-recs-mais').hidden = lista.length < PAGINA_ADMIN
+}
+
+function pintarAlunos(lista, juntar) {
+  const alvo = $('admin-alunos')
+  const itens = lista.map((a) => {
     const el = li(`
       <span class="disc">${esc(a.username)}${a.role === 'admin' ? ' · admin' : ''}</span>
       <span class="meta">${esc(a.email)}${a.bloqueado ? ' · BLOQUEADO' : ''}</span>`)
@@ -1364,8 +1379,85 @@ async function carregarAdmin() {
       el.append(acoes)
     }
     return el
-  }))
+  })
+  if (juntar) alvo.append(...itens)
+  else alvo.replaceChildren(...itens)
+
+  const ultimo = lista[lista.length - 1]
+  if (ultimo) alunosPag.cursor = { criado: ultimo.criado, id: ultimo.id }
+  // busca sem resultado é diferente de base vazia: o aviso de vazio só fala da
+  // base, senão o admin lê "nenhum aluno cadastrado" com 1.000 na tabela
+  const vazio = $('admin-alunos-vazio')
+  vazio.hidden = juntar || lista.length > 0
+  vazio.textContent = termoLimpo(alunosPag.busca).length >= 2
+    ? 'Nenhum aluno com esse username ou e-mail.'
+    : 'Nenhum aluno cadastrado.'
+  $('btn-alunos-mais').hidden = lista.length < PAGINA_ADMIN
+  // o total já veio do boot (RPC `total_alunos`), então a contagem não custa
+  // requisição nova
+  $('admin-alunos-total').textContent = totalAlunos == null ? '' : `· ${totalAlunos}`
 }
+
+async function carregarAdmin() {
+  alunosPag.cursor = null
+  recsPag.cursor = null
+  const [conf, recs, alunos] = await Promise.all([
+    chamar(sb.from('config').select('value').eq('key', 'travado').single()),
+    paginaRecs(null),
+    paginaAlunos(null),
+  ])
+
+  // o painel dizia "nenhuma reclamação aberta" quando a query tinha falhado, e
+  // a lista de alunos ficava vazia sem explicação
+  const falhou = conf.error || recs.error || alunos.error
+  $('admin-falha').hidden = !falhou
+  if (falhou) return
+
+  const travado = conf.data?.value === true
+  $('btn-trava').hidden = false
+  $('btn-trava').textContent = travado ? 'Destravar o site' : 'Travar o site'
+  $('btn-trava').onclick = () => ocupado($('btn-trava'), async () => {
+    const { error } = await chamar(
+      sb.from('config').update({ value: !travado }).eq('key', 'travado'))
+    // o estado local era mutado ANTES de saber se o servidor aceitou: o admin
+    // via a tela mudar e achava que tinha travado o site enquanto todo mundo
+    // seguia navegando
+    if (error) { toast(error.msg); return }
+    cfg.travado = !travado
+    aplicarTrava()
+    carregarAdmin()
+  })
+
+  pintarRecs(recs.data ?? [], false)
+  pintarAlunos(alunos.data ?? [], false)
+}
+
+on('btn-recs-mais', 'click', (ev) => ocupado(ev.currentTarget, async () => {
+  const { data, error } = await paginaRecs(recsPag.cursor)
+  if (error) { toast(error.msg); return }
+  pintarRecs(data ?? [], true)
+}))
+
+on('btn-alunos-mais', 'click', (ev) => ocupado(ev.currentTarget, async () => {
+  const { data, error } = await paginaAlunos(alunosPag.cursor)
+  if (error) { toast(error.msg); return }
+  pintarAlunos(data ?? [], true)
+}))
+
+// busca no servidor, não filtro do que já veio: com 1.000 alunos a tela nunca
+// tem a base inteira em memória pra filtrar
+let timerAdminBusca
+on('admin-busca', 'input', (ev) => {
+  clearTimeout(timerAdminBusca)
+  const termo = ev.target.value
+  timerAdminBusca = setTimeout(async () => {
+    alunosPag.busca = termo
+    alunosPag.cursor = null
+    const { data, error } = await paginaAlunos(null)
+    if (error) { toast(error.msg); return }
+    pintarAlunos(data ?? [], false)
+  }, 300)
+})
 
 on('btn-login', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   if (!sb) { toast('O app não carregou por completo. Recarrega a página.'); return }
