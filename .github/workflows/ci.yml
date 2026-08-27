@@ -49,6 +49,22 @@ jobs:
       - run: python scripts/versao.py --base origin/main
       - run: python scripts/smoke.py
 
+  functions:
+    # as edge functions nunca passaram por typecheck: o ambiente do Josh nao tem
+    # Deno e o CI so rodava Python. Dois erros de tipo estavam em producao no
+    # `_shared/webpush.ts` desde 13/08, invisiveis porque o runtime ignora tipo.
+    # O `deno test` roda o push-slot em escala de lancamento (1.500 materias)
+    # contra um `fetch` de mentira, sem tocar em Supabase nenhum.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/*/index.ts supabase/functions/_shared/*.ts supabase/functions/*/logica.ts
+      - run: deno test supabase/functions/
+
   gitleaks:
     runs-on: ubuntu-latest
     timeout-minutes: 5
