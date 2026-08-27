@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=41'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=42'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -275,9 +275,12 @@ let posHoje = []
 // ficava em fantasma pra sempre: foi assim que, em aula do Osmar às 10:59, a
 // busca respondeu "sem aula hoje" pra uma aula que estava acontecendo. O teto
 // existia só no boot; as outras quinze chamadas do arquivo não tinham nenhum.
-const comTeto = (p, ms = 9000) => Promise.race([
+const comTeto = (p, ms = 9000, aoEstourar) => Promise.race([
   p,
-  new Promise((_, falha) => setTimeout(() => falha(new Error('tempo esgotado')), ms)),
+  new Promise((_, falha) => setTimeout(() => {
+    aoEstourar?.()
+    falha(new Error('tempo esgotado'))
+  }, ms)),
 ])
 
 // Erro do servidor vira frase que o aluno entende. Sem isto o app chamava tudo
@@ -302,9 +305,16 @@ async function chamar(q, ms = 9000) {
   if (!sb) {
     return { data: null, error: { tipo: 'offline', msg: 'O app não carregou por completo.' } }
   }
+  // Cancelamento de verdade, não só parar de esperar. O `Promise.race` sozinho
+  // abandonava a espera e deixava a requisição VIVA: uma escrita que chega no
+  // servidor depois do teto vira linha duplicada quando o aluno toca de novo,
+  // que é exatamente o caso do cadastro de matéria em rede de celular.
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+  if (ctrl && typeof q?.abortSignal === 'function') q = q.abortSignal(ctrl.signal)
+
   let r
   try {
-    r = await comTeto(Promise.resolve(q), ms)
+    r = await comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
   } catch {
     return { data: null, error: { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' } }
   }
@@ -1642,8 +1652,22 @@ on('form-username', 'submit', (e) => {
       termos_em: new Date().toISOString(), termos_versao: TERMOS_VERSAO,
     }))
     if (error) {
-      mostrarErroUsername(error.tipo === 'duplicado'
-        ? 'Esse username já existe. Tenta outro.' : error.msg)
+      // 23505 no cadastro tem DOIS significados: username de outra pessoa, ou o
+      // perfil desta conta que já nasceu (duas abas no mesmo passo, ou a
+      // primeira tentativa que estourou o teto e chegou ao servidor assim
+      // mesmo). Antes, o dono do perfil recém-criado lia "esse username já
+      // existe" e ficava preso no passo 2 com a conta pronta do outro lado.
+      if (error.tipo === 'duplicado') {
+        await carregarPerfil()
+        if (perfil) {
+          toast(`Bem-vindo/a, ${perfil.username}!`)
+          if (!minhas.length) mostrar('materias')
+          return
+        }
+        mostrarErroUsername('Esse username já existe. Tenta outro.')
+        return
+      }
+      mostrarErroUsername(error.msg)
       return
     }
     toast(`Bem-vindo/a, ${u}! Agora monte sua grade.`)
