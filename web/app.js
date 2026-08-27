@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=38'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=41'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -266,6 +266,9 @@ let cfg = {}
 let totalAlunos = null
 let pronto = null
 let mapaCarregado = false
+// linhas da pós-graduação do DIA DE HOJE. Vem vazio quando a planilha da pós
+// está desatualizada: o servidor só manda o lote cuja data bate com hoje.
+let posHoje = []
 
 // ── Rede ─────────────────────────────────────────────────────────────────────
 // Rede de celular pendura requisição sem avisar, e sem teto de tempo a tela
@@ -326,6 +329,63 @@ async function ocupado(btn, tarefa) {
 // o teto e chamava falhaNoMapa(), apagando a tela boa.
 let seqAgora = 0
 
+// Uma resposta no lugar de quatro.
+//
+// O boot pedia mapa, salas, config e total em quatro requisições e repetia as
+// quatro a cada 5 minutos: 22,3 KiB por carga, medidos em 27/08. Nada disso é
+// pessoal, então cabe numa função só, que dá pra cachear e é o caminho único
+// pro dia em que o firewall do campus obrigar a servir por ibsala.com.br.
+//
+// Enquanto a migration 0018 não estiver aplicada, o app continua funcionando
+// pelas quatro consultas de antes: a decisão é tomada UMA vez por carga, e só
+// quando o servidor diz que a função não existe (PGRST202). Erro de rede não
+// dispara o desvio, senão a tentativa custaria o dobro justamente quando a rede
+// está ruim.
+let semRpcEstado = false
+let marcaEstado = null
+
+async function estadoPublico() {
+  if (!semRpcEstado) {
+    const r = await sb.rpc('estado_publico', { marca: marcaEstado })
+    if (!r.error) {
+      const d = r.data ?? {}
+      marcaEstado = d.marca ?? null
+      // nada mudou desde a última carga: o mapa e as salas que já estão na
+      // memória seguem valendo, e vieram só config e total
+      if (d.mudou === false) {
+        return { igual: true, config: d.config ?? [], total: d.total ?? null }
+      }
+      return {
+        igual: false, mapa: d.mapa ?? [], salas: d.salas ?? [],
+        pos: d.pos ?? [], config: d.config ?? [], total: d.total ?? null,
+      }
+    }
+    if (r.error?.code !== 'PGRST202') throw r.error
+    semRpcEstado = true
+  }
+
+  const [mapa, inv, conf, quantos] = await Promise.all([
+    sb.from('mapa_dia').select('turma,codigo,disciplina,horario,professor,sala,sala_canon')
+      .eq('data', hojeISO()),
+    sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
+    sb.from('config').select('key,value'),
+    sb.rpc('total_alunos'),
+  ])
+  // mapa e salas são o que a tela precisa pra existir; config e total são
+  // enfeite que pode faltar, como já era antes
+  if (mapa.error || inv.error) throw mapa.error ?? inv.error
+  return {
+    igual: false,
+    mapa: mapa.data ?? [],
+    salas: inv.data ?? [],
+    // a pós vive na RPC (0019). No caminho de compatibilidade ela some da tela
+    // inteira, que é melhor do que uma quinta requisição por carga
+    pos: [],
+    config: conf.error ? [] : (conf.data ?? []),
+    total: quantos.error ? null : quantos.data,
+  }
+}
+
 async function carregarAgora({ ghost = false } = {}) {
   if (!sb) return              // sem bundle não há o que buscar; o aviso já está na tela
   if (ghost) {
@@ -334,42 +394,70 @@ async function carregarAgora({ ghost = false } = {}) {
     ghostLinhas($('board-agora'))
   }
   const meu = ++seqAgora
-  let mapa, inv, conf, quantos
+  let est
   try {
-    [mapa, inv, conf, quantos] = await comTeto(Promise.all([
-      sb.from('mapa_dia').select('turma,codigo,disciplina,horario,professor,sala,sala_canon')
-        .eq('data', hojeISO()),
-      sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
-      sb.from('config').select('key,value'),
-      sb.rpc('total_alunos'),
-    ]))
+    est = await comTeto(estadoPublico())
   } catch {
     if (meu === seqAgora) falhaNoMapa()
-    return
+    return false
   }
-  if (meu !== seqAgora) return          // resposta velha não pinta por cima da nova
-  if (mapa.error || inv.error) { falhaNoMapa(); return }
+  if (meu !== seqAgora) return true     // resposta velha não pinta por cima da nova
 
   // Mapa vazio em dia útil dentro de horário de aula NÃO é "tudo livre": é o
   // mapa que ainda não chegou. A retenção apaga às 00:30 e a primeira captura
   // do dia é às 05h, e em 11/08 o app passou a madrugada inteira anunciando
   // salas livres demais e nenhuma aula.
+  const mapaNovo = est.igual ? mapaHoje : est.mapa
   const diaUtil = agoraBRT().getDay() >= 1 && agoraBRT().getDay() <= 5
-  if (!mapa.data.length && diaUtil && slotAtual()) { falhaNoMapa({ vazio: true }); return }
+  if (!mapaNovo.length && diaUtil && slotAtual()) { falhaNoMapa({ vazio: true }); return false }
 
   $('agora-falha').hidden = true
   $('busca-sem-mapa').hidden = true
   mapaCarregado = true
-  mapaHoje = mapa.data
-  salas = inv.data
-  if (!conf.error) cfg = Object.fromEntries((conf.data ?? []).map((r) => [r.key, r.value]))
-  if (!quantos.error && typeof quantos.data === 'number') totalAlunos = quantos.data
+  mapaHoje = mapaNovo
+  if (!est.igual) {
+    salas = est.salas
+    posHoje = est.pos ?? []
+  }
+  // lista vazia aqui é falha da parte tolerada, não config apagada: sobrescrever
+  // `cfg` com {} desligaria a trava do site sem ninguém ter mandado
+  if (est.config.length) cfg = Object.fromEntries(est.config.map((r) => [r.key, r.value]))
+  if (typeof est.total === 'number') totalAlunos = est.total
   aplicarTrava()
   pintarAgora()
   // "Hoje" do aluno é montado cruzando as matérias com este mapa. Quando o
   // login resolvia primeiro (rota mais curta), a tela dizia "sem sala no mapa
   // de hoje" em TODAS as matérias e nunca mais se corrigia sozinha.
   if (perfil) pintarHoje()
+  return true
+}
+
+// Polling que enxerga a aba escondida.
+//
+// Era `setInterval` fixo de 5 min, que roda igual com o app em segundo plano:
+// ~48 cargas por aluno por dia, sempre completas. Projetando 1.000 alunos, isso
+// se aproximava de 22 GB em 20 dias letivos contra os 5 GB da cota Free. Aba
+// escondida não pinta nada na tela, então buscar ali é egress puro.
+//
+// O jitter existe porque 1.000 celulares que abriram o app na mesma aula
+// acordariam no mesmo segundo, e o recuo existe para não martelar um backend
+// que já está respondendo mal (volta pro ritmo normal no primeiro acerto).
+const POLL_BASE = 5 * 60 * 1000
+const POLL_TETO = 30 * 60 * 1000
+const POLL_JITTER = 30 * 1000
+let pollAtraso = POLL_BASE
+let pollTimer
+
+function agendarPoll(ms = pollAtraso) {
+  clearTimeout(pollTimer)
+  pollTimer = setTimeout(async () => {
+    // escondido: reagenda sem gastar rede. Quem traz de volta na hora é o
+    // `visibilitychange`, que já estava aqui.
+    if (document.hidden) { agendarPoll(); return }
+    const ok = await carregarAgora()
+    pollAtraso = ok ? POLL_BASE : Math.min(pollAtraso * 2, POLL_TETO)
+    agendarPoll()
+  }, ms + Math.random() * POLL_JITTER)
 }
 
 // Data, turno e contagem pro próximo slot saem do RELÓGIO, não do servidor.
@@ -503,6 +591,7 @@ function pintarAgora() {
     <span class="sala">${esc(chipSala(r))}</span>
     <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
+  pintarPos()
 
   // quantos já usam: prova social pra quem chega pelo QR code sem conta
   $('pill-alunos').hidden = !totalAlunos
@@ -686,8 +775,17 @@ async function buscar(termo, tela) {
   const semAulaHoje = (data ?? []).filter((r) => !codigosHoje.has(r.codigo))
     .sort((a, b) => String(a.disciplina).localeCompare(String(b.disciplina), 'pt-BR'))
 
+  // a pós entra na busca por disciplina, professor e curso. Não entra na tela de
+  // Adicionar disciplinas: a fonte não tem código estável nem dia e horário, e
+  // matéria pessoal sem isso não vira aviso nenhum
+  const daPos = tela.adicionar
+    ? []
+    : posHoje.filter((r) => [r.disciplina, r.professor, r.curso, r.sala]
+        .some((v) => semAcentoJs(v).includes(semAcentoJs(termo))))
+
   const cards = [
     ...linhasHoje.map((r) => cardAula(r, tela)),
+    ...daPos.map(cardPos),
     ...semAulaHoje.map((r) => cardCatalogo(r, tela)),
   ]
   lista.removeAttribute('aria-busy')
@@ -701,11 +799,46 @@ async function buscar(termo, tela) {
   $(tela.semMapa).hidden = mapaCarregado || cards.length === 0
 }
 
+// A pós entra como INFORMAÇÃO do dia, nunca como ocupação.
+//
+// A planilha da coordenação da pós não tem coluna de horário (conferido em
+// 27/08), e sem horário nenhuma linha pode dizer em qual dos seis slots a sala
+// está ocupada. Por isso `livresNoSlot` continua olhando só o `mapaHoje`: nada
+// daqui tira sala da lista de livres.
+//
+// O bloco só aparece quando existe linha do DIA DE HOJE. Planilha parada em
+// outra data não vira tela: quem decide isso é o servidor, que só manda o lote
+// com `data_fonte` igual a hoje.
+function pintarPos() {
+  const bloco = $('bloco-pos')
+  if (!bloco) return
+  bloco.hidden = !posHoje.length
+  $('board-pos').replaceChildren(...posHoje.map(cardPos))
+}
+
+// vermelho E etiqueta: cor sozinha não chega em leitor de tela, não chega em
+// quem não distingue vermelho, e aqui vermelho já significa erro
+function cardPos(r) {
+  const el = li(`
+    <span class="disc"><span class="tag-pos">PÓS</span>${esc(r.disciplina || 'Aula da pós')}</span>
+    <span class="sala">${esc(r.sala || (r.modalidade === 'remoto' ? 'Remoto' : '—'))}</span>
+    <span class="meta">${esc(nomeCurto(r.professor))}</span>
+    <span class="curso">${esc(r.curso || 'Pós-graduação')}</span>`)
+  el.dataset.origem = 'pos'
+  metaEnxuta(el, [r.curso, r.professor, r.sala].filter(Boolean).join(' · '))
+  return el
+}
+
 // O chip mostra a sala CANÔNICA quando o repertório resolveu, e o rótulo cru da
 // planilha desce pra meta. Rótulo cru pode ser gigante
 // ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)") e, dentro de um chip, engolia a
 // linha inteira: a disciplina saía uma letra por linha no celular.
 const chipSala = (r) => r.sala_canon || r.sala || '—'
+
+// o curso da pós vem em caixa alta e com acento ("LLM EM DIREITO TRIBUTÁRIO"),
+// e quem busca digita minúsculo e sem acento
+const semAcentoJs = (v) => String(v ?? '').normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 // A meta da linha estourava em duas e três alturas no celular: "hoje · 07:30/09:20
 // · 4 ENG/4 E.COMP · SERGIO LUIZ ARAUJO VIEIRA" não cabe em 390px de jeito
@@ -1647,14 +1780,21 @@ if (!sb) {
   })
 
   pronto = carregarAgora({ ghost: true })
-  setInterval(() => carregarAgora(), 5 * 60 * 1000)
+  agendarPoll()
   setInterval(() => (mapaCarregado ? pintarAgora() : pintarRelogio()), 60 * 1000)
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return
     carregarAgora()          // PWA retomada não mostra número da véspera
     procurarAtualizacao()    // nem versão da véspera
+    pollAtraso = POLL_BASE   // voltou pro primeiro plano: recomeça no ritmo normal
+    agendarPoll()
   })
-  window.addEventListener('online', () => { carregarAgora(); procurarAtualizacao() })
+  window.addEventListener('online', () => {
+    carregarAgora()
+    procurarAtualizacao()
+    pollAtraso = POLL_BASE
+    agendarPoll()
+  })
 }
 
 // última linha de propósito: se algo acima lançar, esta marca não aparece, e é

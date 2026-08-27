@@ -47,6 +47,14 @@
   --aviso-soft: #fff8ef;
   --aviso-borda: #f0d9b8;
   --perigo: #c62828;
+  /* pós-graduação: fonte separada, identidade vermelha. Vermelho sozinho não
+     basta (daltonismo, e vermelho já significa erro aqui), por isso a etiqueta
+     PÓS anda junto em todo cartão. */
+  --pos-vermelho: #b3261e;
+  --pos-sobre-vermelho: #ffffff;
+  --pos-suave: #fff4f3;
+  --pos-borda: #e0a49e;
+  --pos-texto: #8c1d18;
   --text: #0b1220;
   --text-dim: #475168;
   --text-muted: #62708c;
@@ -111,6 +119,11 @@
     --aviso-borda: #4a3a17;
     /* #dc2626 sobre o cartão escuro dava 4,45:1 e reprovava AA por pouco */
     --perigo: #ff7a6b;
+    --pos-vermelho: #ff8a7a;
+    --pos-sobre-vermelho: #2b0d0a;
+    --pos-suave: #241412;
+    --pos-borda: #5c2a24;
+    --pos-texto: #ffb4a8;
     --text: #e8edf8;
     --text-dim: #a8b4d0;
     --text-muted: #8896c0; /* sólido; nunca opacity em texto */
@@ -144,6 +157,11 @@
     --aviso-borda: #4a3a17;
     /* #dc2626 sobre o cartão escuro dava 4,45:1 e reprovava AA por pouco */
     --perigo: #ff7a6b;
+    --pos-vermelho: #ff8a7a;
+    --pos-sobre-vermelho: #2b0d0a;
+    --pos-suave: #241412;
+    --pos-borda: #5c2a24;
+    --pos-texto: #ffb4a8;
     --text: #e8edf8;
     --text-dim: #a8b4d0;
     --text-muted: #8896c0; /* sólido; nunca opacity em texto */
@@ -427,6 +445,47 @@ main {
 }
 
 .board li + li { border-top: 1px solid var(--border-soft); }
+
+/* ── pós-graduação ──────────────────────────────────────────────────────────
+   Fonte separada da graduação, com identidade própria. A cor não carrega o
+   recado sozinha: a etiqueta PÓS anda em todo cartão, porque vermelho aqui já
+   significa erro e porque cor sozinha não chega em leitor de tela nem em quem
+   não distingue vermelho. */
+.board li[data-origem="pos"] {
+  background: var(--pos-suave);
+  box-shadow: inset 3px 0 0 var(--pos-vermelho);
+}
+
+.tag-pos {
+  display: inline-block;
+  background: var(--pos-vermelho);
+  color: var(--pos-sobre-vermelho);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+/* O curso é o que diferencia duas linhas da pós entre si, então ele não é meta:
+   fica na cor da própria origem e numa linha própria. `dias` é a faixa que a
+   lista já reserva embaixo da meta e que a pós não usa para outra coisa; sem
+   isso curso e professor caem na MESMA célula do grid e se sobrepõem, que foi o
+   que o render dos dois temas mostrou. */
+.board li[data-origem="pos"] .curso {
+  grid-area: dias;
+  font-size: var(--t-sm);
+  color: var(--pos-texto);
+  font-weight: 600;
+  padding-top: 2px;
+}
+
+.board li[data-origem="pos"] .sala {
+  color: var(--pos-sobre-vermelho);
+  background: var(--pos-vermelho);
+}
 
 .board .sala {
   grid-area: sala;
