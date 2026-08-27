@@ -65,6 +65,28 @@ jobs:
       - run: deno check supabase/functions/*/index.ts supabase/functions/_shared/*.ts supabase/functions/*/logica.ts
       - run: deno test supabase/functions/
 
+  sql:
+    # Os dois furos mais graves do projeto sairam de auditoria manual, em agosto:
+    # `alunos_update_own` sem `with check` (qualquer aluno logado virava admin) e
+    # as tres `disparar_*` executaveis por `anon`. Nenhum teste do repo olhava
+    # pro banco. Este job sobe um Postgres limpo, aplica TODAS as migrations na
+    # ordem e cobra RLS, grants e quota com o papel de cada usuario do app.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase db start
+      - name: RLS, grants e quotas
+        run: |
+          for t in supabase/tests/*.sql; do
+            echo "== $t"
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$t"
+          done
+
   gitleaks:
     runs-on: ubuntu-latest
     timeout-minutes: 5
