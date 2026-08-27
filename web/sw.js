@@ -1,5 +1,5 @@
 // ibsala v5 — service worker: casca offline + web push
-const CACHE = 'ibsala-v5-41'
+const CACHE = 'ibsala-v5-42'
 // O `?v=` do index.html entra no precache: `caches.match` compara a URL inteira,
 // query junto, então guardar `/app.js` cru deixaria o pedido real (`/app.js?v=20`)
 // sem reserva offline. Um número só, tirado do próprio CACHE, pra não existir
@@ -7,7 +7,7 @@ const CACHE = 'ibsala-v5-41'
 const V = CACHE.split('-').pop()
 const SHELL = ['/', `/style.css?v=${V}`, `/app.js?v=${V}`, `/config.js?v=${V}`,
   '/manifest.json', '/privacidade.html', '/termos.html',
-  '/vendor/supabase.min.js',
+  '/vendor/supabase-2.112.3.min.js',
   '/fonts/inter-latin.woff2', '/fonts/inter-latin-ext.woff2',
   '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.svg']
 
@@ -56,7 +56,11 @@ self.addEventListener('fetch', (e) => {
     fetch(pedido).then((resp) => {
       if (resp.ok) {
         const clone = resp.clone()
-        caches.open(CACHE).then((c) => c.put(e.request, clone))
+        // `waitUntil` e não promessa solta: sem ele o navegador pode encerrar o
+        // worker assim que a resposta sai, e a gravação no cache morre no meio.
+        // O efeito aparece só offline, que é quando ninguém está olhando: casca
+        // pela metade e página em branco.
+        e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, clone)))
       }
       return resp
     }).catch(() => caches.match(e.request)))
