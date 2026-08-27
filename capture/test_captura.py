@@ -1,6 +1,7 @@
 """Testes do parser da captura. Rodar: python3 -m pytest capture/ -q"""
 
 import json
+import os
 
 import pytest
 
@@ -168,3 +169,37 @@ def test_repertorio_ambiguo_morre_no_load(tmp_path):
     }), encoding="utf-8")
     with pytest.raises(ValueError, match="ambíguo"):
         carregar_repertorio(str(ruim))
+
+
+def test_golden_e_o_mesmo_csv_da_pasta():
+    """O golden carrega o CSV dentro dele porque o teste do TypeScript importa
+    JSON (import não pede permissão de leitura no Deno). Se as duas cópias
+    divergirem, os dois lados passam a responder por fixtures diferentes e a
+    paridade vira teatro."""
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    golden = json.load(open(os.path.join(raiz, "capture/fixtures/paridade-golden.json"),
+                            encoding="utf-8"))
+    csv = open(os.path.join(raiz, "capture/fixtures/paridade.csv"), encoding="utf-8").read()
+    assert golden["csv"] == csv
+
+
+def test_python_bate_com_o_golden(rep):
+    """O MESMO arquivo que o teste do TypeScript usa. Até aqui só o parser
+    Python tinha teste direto no CI, e o portão de paridade
+    (scripts/paridade-captura.py) exige a edge function deployada: porte de
+    parser passava por cima da 114 sem ninguém ver."""
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    golden = json.load(open(os.path.join(raiz, "capture/fixtures/paridade-golden.json"),
+                            encoding="utf-8"))
+    linhas = parsear(golden["csv"])
+    pendentes, multiplas = anotar_canonicas(linhas, rep)
+    for l in linhas:
+        l.pop("data", None)          # é o dia da execução; o golden vale amanhã
+
+    assert len(linhas) == golden["linhas"]
+    assert sum(1 for l in linhas if l["sala_canon"]) == golden["ocupando"]
+    assert len(pendentes) == golden["quarentena"]
+    assert pendentes == golden["pendentes"]
+    assert multiplas == golden["multiplas"]
+    assert sorted({l["codigo"] for l in linhas if l["codigo"]}) == golden["disciplinas"]
+    assert linhas == golden["linhas_detalhe"]

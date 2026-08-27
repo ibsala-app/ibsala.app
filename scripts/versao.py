@@ -86,6 +86,19 @@ def main():
     ok &= conferir('sw.js monta o SHELL a partir do CACHE',
                    "CACHE.split('-').pop()" in sw and '`/app.js?v=${V}`' in sw)
 
+    # o bundle do supabase-js fica sob `immutable` de um ano e NÃO tem `?v=`: se
+    # ele mudasse de conteúdo com o mesmo nome, quem já abriu o app ficaria com a
+    # versão velha por 12 meses. A versão entra no NOME do arquivo, que é o que
+    # muda o endereço só quando a biblioteca muda, sem custar download novo a
+    # cada deploy. Aqui se cobra que HTML, service worker e disco concordem.
+    m = re.search(r'vendor/(supabase-[\d.]+\.min\.js)', html)
+    vendor = m.group(1) if m else None
+    ok &= conferir('index.html aponta pro vendor versionado', vendor is not None)
+    if vendor:
+        ok &= conferir(f'sw.js precacheia o mesmo {vendor}', f'/vendor/{vendor}' in sw)
+        ok &= conferir(f'{vendor} existe em web/vendor',
+                       os.path.exists(os.path.join(RAIZ, 'web', 'vendor', vendor)))
+
     if base:
         alterados = git('diff', '--name-only', f'{base}...HEAD')
         if alterados is None:

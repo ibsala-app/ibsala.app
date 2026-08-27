@@ -1,0 +1,246 @@
+{
+  "_doc": "Payload do parser Python sobre capture/fixtures/paridade.csv, sem o campo `data` (que é o dia da execução). O teste do Python e o do TypeScript comparam contra ESTE arquivo, então as duas implementações respondem pela mesma verdade sem a edge function no ar. O `csv` está aqui dentro porque import de JSON não pede permissão de leitura no Deno; o teste do Python confere que ele é byte a byte o .csv da pasta.",
+  "csv": "MAPA DE SALAS,,,,,\nGRADUAÇÃO - MANHÃ,,,,,\nTurma,Disciplina,,Professor,Salas\n1 DIR,IBM2981-8001/ HISTORIA DO DIREITO,07:30/09:20,FELIPE AUGUSTO,306\n3 E.COMP/SOFT,IBM0733-8002/ PADRÕES E PROJETO DE SOFTWARE,07:30/09:20,TADEU MOREIRA PERONA,110\n2 ARQ,IBM2695-8002/ EXPRESSÃO E REPRESENTAÇÃO DIGITAL,09:50/11:40,ANDRÉ LUIZ,\"113 (PRANCHETAS)\"\n5 ECP,IBM0107-3001/ ESTRUTURA DE DADOS,09:50/11:40,OSMAR,114 LAB QUIMICA/FISICA\n4 ENG,IBM0044-8001/ FLUIDOS,09:50/11:40,LUCAS,114 - LAB. FISICA\nGRADUAÇÃO - TARDE,,,,,\nTurma,Disciplina,,Professor,Salas\n5 ENG,IBM0301-8001/ ARQUITETURA DE COMPUTADORES,15:50/17:40,ANDRE COSTA,207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)\n3 ARQ,IBM0302-8001/ METROLOGIA,13:30/15:20,PAULA,107 (P2) - LAB.METROLOGIA\n3 ARQ,IBM0303-8001/ HIDRAULICA,15:50/17:40,PAULA,LAB. HIDRAULICA - 108 (P2)\n4 SIS,IBM0304-8001/ REDES,13:30/15:20,MARCOS,202 (P2) LAB.REDES\n2 ADM,IBM0305-8001/ AULA CANCELADA,13:30/15:20,FRANK,CANCELADA\n1 ECO,IBM0306-8001/ ELETIVA ONLINE,13:30/15:20,LUCAS,ONLINE\n4 ARQ,IBM0307-8001/ PROJETO INTEGRADO,15:50/17:40,ANDRE,302/303\n3 DIR,IBM0308-8001/ SEMINARIO,13:30/15:20,TARCISIO,304/035\nGRADUAÇÃO - NOITE,,,,,\nTurma,Disciplina,,Professor,Salas\n3 E.COMP,IBM0107-8001/ ESTRUTURA DE DADOS,18:40/22:30,OSMAR,3L1\n4 ENG,IBM0109-8001/ MODELAGEM TRIDIMENSIONAL,18:40/22:30,CARLOS,204\n2 ENG,IBM0110-8001/ MAKER,18:40/22:30,MARCEL,109 (P2) MAKER\nOUTRAS RESERVAS - NOITE,,,,,\nTurma,Disciplina,,Professor,Salas\nEVENTO,,11/:00/18:00,,103 (DESIGN THINKING)\nEVENTO,,13:30/15:20,,AUDITÓRIO\nEVENTO,,15:20/16:00,,FOYER\nEVENTO,PALESTRA DA LIGA,19:00/21:00,,SALA DO CAFE\nEVENTO,MOSTRA,19:00/21:00,,SALA DO CAFE\nGRADUÇÃO - SÁBADO,,,,,\n",
+  "disciplinas": [
+    "IBM0044-8001",
+    "IBM0107-3001",
+    "IBM0107-8001",
+    "IBM0109-8001",
+    "IBM0110-8001",
+    "IBM0301-8001",
+    "IBM0302-8001",
+    "IBM0303-8001",
+    "IBM0304-8001",
+    "IBM0305-8001",
+    "IBM0306-8001",
+    "IBM0307-8001",
+    "IBM0308-8001",
+    "IBM0733-8002",
+    "IBM2695-8002",
+    "IBM2981-8001"
+  ],
+  "linhas": 21,
+  "linhas_detalhe": [
+    {
+      "categoria": "GRADUAÇÃO - MANHÃ",
+      "codigo": "IBM2981-8001",
+      "disciplina": "HISTORIA DO DIREITO",
+      "horario": "07:30/09:20",
+      "professor": "FELIPE AUGUSTO",
+      "sala": "306",
+      "sala_canon": "306",
+      "turma": "1 DIR"
+    },
+    {
+      "categoria": "GRADUAÇÃO - MANHÃ",
+      "codigo": "IBM0733-8002",
+      "disciplina": "PADRÕES E PROJETO DE SOFTWARE",
+      "horario": "07:30/09:20",
+      "professor": "TADEU MOREIRA PERONA",
+      "sala": "110",
+      "sala_canon": "110",
+      "turma": "3 E.COMP/SOFT"
+    },
+    {
+      "categoria": "GRADUAÇÃO - MANHÃ",
+      "codigo": "IBM2695-8002",
+      "disciplina": "EXPRESSÃO E REPRESENTAÇÃO DIGITAL",
+      "horario": "09:50/11:40",
+      "professor": "ANDRÉ LUIZ",
+      "sala": "113 (PRANCHETAS)",
+      "sala_canon": "113",
+      "turma": "2 ARQ"
+    },
+    {
+      "categoria": "GRADUAÇÃO - MANHÃ",
+      "codigo": "IBM0107-3001",
+      "disciplina": "ESTRUTURA DE DADOS",
+      "horario": "09:50/11:40",
+      "professor": "OSMAR",
+      "sala": "114 LAB QUIMICA/FISICA",
+      "sala_canon": "114",
+      "turma": "5 ECP"
+    },
+    {
+      "categoria": "GRADUAÇÃO - MANHÃ",
+      "codigo": "IBM0044-8001",
+      "disciplina": "FLUIDOS",
+      "horario": "09:50/11:40",
+      "professor": "LUCAS",
+      "sala": "114 - LAB. FISICA",
+      "sala_canon": "114",
+      "turma": "4 ENG"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0301-8001",
+      "disciplina": "ARQUITETURA DE COMPUTADORES",
+      "horario": "15:50/17:40",
+      "professor": "ANDRE COSTA",
+      "sala": "207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)",
+      "sala_canon": "P2-206",
+      "turma": "5 ENG"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0302-8001",
+      "disciplina": "METROLOGIA",
+      "horario": "13:30/15:20",
+      "professor": "PAULA",
+      "sala": "107 (P2) - LAB.METROLOGIA",
+      "sala_canon": "P2-107",
+      "turma": "3 ARQ"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0303-8001",
+      "disciplina": "HIDRAULICA",
+      "horario": "15:50/17:40",
+      "professor": "PAULA",
+      "sala": "LAB. HIDRAULICA - 108 (P2)",
+      "sala_canon": "P2-108",
+      "turma": "3 ARQ"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0304-8001",
+      "disciplina": "REDES",
+      "horario": "13:30/15:20",
+      "professor": "MARCOS",
+      "sala": "202 (P2) LAB.REDES",
+      "sala_canon": "P2-202",
+      "turma": "4 SIS"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0305-8001",
+      "disciplina": "AULA CANCELADA",
+      "horario": "13:30/15:20",
+      "professor": "FRANK",
+      "sala": "CANCELADA",
+      "sala_canon": null,
+      "turma": "2 ADM"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0306-8001",
+      "disciplina": "ELETIVA ONLINE",
+      "horario": "13:30/15:20",
+      "professor": "LUCAS",
+      "sala": "ONLINE",
+      "sala_canon": null,
+      "turma": "1 ECO"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0307-8001",
+      "disciplina": "PROJETO INTEGRADO",
+      "horario": "15:50/17:40",
+      "professor": "ANDRE",
+      "sala": "302/303",
+      "sala_canon": null,
+      "turma": "4 ARQ"
+    },
+    {
+      "categoria": "GRADUAÇÃO - TARDE",
+      "codigo": "IBM0308-8001",
+      "disciplina": "SEMINARIO",
+      "horario": "13:30/15:20",
+      "professor": "TARCISIO",
+      "sala": "304/035",
+      "sala_canon": "304",
+      "turma": "3 DIR"
+    },
+    {
+      "categoria": "GRADUAÇÃO - NOITE",
+      "codigo": "IBM0107-8001",
+      "disciplina": "ESTRUTURA DE DADOS",
+      "horario": "18:40/22:30",
+      "professor": "OSMAR",
+      "sala": "3L1",
+      "sala_canon": "3L1",
+      "turma": "3 E.COMP"
+    },
+    {
+      "categoria": "GRADUAÇÃO - NOITE",
+      "codigo": "IBM0109-8001",
+      "disciplina": "MODELAGEM TRIDIMENSIONAL",
+      "horario": "18:40/22:30",
+      "professor": "CARLOS",
+      "sala": "204",
+      "sala_canon": "204",
+      "turma": "4 ENG"
+    },
+    {
+      "categoria": "GRADUAÇÃO - NOITE",
+      "codigo": "IBM0110-8001",
+      "disciplina": "MAKER",
+      "horario": "18:40/22:30",
+      "professor": "MARCEL",
+      "sala": "109 (P2) MAKER",
+      "sala_canon": "P2-109",
+      "turma": "2 ENG"
+    },
+    {
+      "categoria": "OUTRAS RESERVAS - NOITE",
+      "codigo": "",
+      "disciplina": "",
+      "horario": "11/:00/18:00",
+      "professor": "",
+      "sala": "103 (DESIGN THINKING)",
+      "sala_canon": "103",
+      "turma": "EVENTO"
+    },
+    {
+      "categoria": "OUTRAS RESERVAS - NOITE",
+      "codigo": "",
+      "disciplina": "",
+      "horario": "13:30/15:20",
+      "professor": "",
+      "sala": "AUDITÓRIO",
+      "sala_canon": null,
+      "turma": "EVENTO"
+    },
+    {
+      "categoria": "OUTRAS RESERVAS - NOITE",
+      "codigo": "",
+      "disciplina": "",
+      "horario": "15:20/16:00",
+      "professor": "",
+      "sala": "FOYER",
+      "sala_canon": null,
+      "turma": "EVENTO"
+    },
+    {
+      "categoria": "OUTRAS RESERVAS - NOITE",
+      "codigo": "",
+      "disciplina": "PALESTRA DA LIGA",
+      "horario": "19:00/21:00",
+      "professor": "",
+      "sala": "SALA DO CAFE",
+      "sala_canon": null,
+      "turma": "EVENTO"
+    },
+    {
+      "categoria": "OUTRAS RESERVAS - NOITE",
+      "codigo": "",
+      "disciplina": "MOSTRA",
+      "horario": "19:00/21:00",
+      "professor": "",
+      "sala": "SALA DO CAFE",
+      "sala_canon": null,
+      "turma": "EVENTO"
+    }
+  ],
+  "multiplas": {
+    "302/303": [
+      "302",
+      "303"
+    ]
+  },
+  "ocupando": 14,
+  "pendentes": {
+    "SALA DO CAFE": 2
+  },
+  "quarentena": 1
+}
