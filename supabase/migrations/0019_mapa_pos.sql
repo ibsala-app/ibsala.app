@@ -141,7 +141,8 @@ begin
     '|' || (select count(*) from public.mapa_dia m where m.data = dia)::text ||
     '|' || coalesce((select md5(string_agg(s.sala || s.predio, ',' order by s.sala))
                        from public.salas s where s.ativa), '') ||
-    '|' || coalesce((select max(p.batch_id)::text from public.mapa_pos p
+    -- `max(uuid)` não existe no Postgres: o cast vem ANTES do agregado
+    '|' || coalesce((select max(p.batch_id::text) from public.mapa_pos p
                       where p.data_fonte = dia), '') ||
     '|' || (select count(*) from public.mapa_pos p where p.data_fonte = dia)::text
   ) into agora;
