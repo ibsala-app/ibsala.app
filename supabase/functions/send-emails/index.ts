@@ -1,22 +1,29 @@
 // send-emails: drena a email_queue via Resend (remetente no-reply; Resend é só
 // pros emails automáticos — suporte/recebimento é o Gmail ibsala.app@gmail.com).
 // Chamada pelo pg_cron a cada 5 min (0004_email.sql) com body {} — pega até 50
-// pendentes (enviado=false, tentativas<5) e envia uma a uma (rate limit Resend
-// free = 2 req/s). Sucesso marca enviado; falha do item incrementa tentativas;
-// erro de CONTA (429 rate limit, 401 key inválida, 403 domínio não verificado)
-// para a rodada sem queimar tentativas — a fila segura até a conta estar sã.
+// pendentes pela RPC `claim_emails` (0015), que trava a linha com lease de 5 min
+// e `skip locked`, e envia uma a uma (rate limit Resend free = 2 req/s).
+// Sucesso marca enviado; falha do item incrementa tentativas; erro de CONTA
+// (429 rate limit, 401 key inválida, 403 domínio não verificado) para a rodada
+// sem queimar tentativas — a fila segura até a conta estar sã. Antes do claim,
+// a rodada pergunta ao banco quantos emails já saíram nas últimas 24 h e para
+// sozinha ao bater `EMAIL_TETO_DIA` (100 no Free), que é o que sustenta o
+// onboarding escalonado de 1.000 alunos sem estourar a conta.
 // body da fila: JSON {"template":"welcome"|"exclusao","vars":{...}} renderizado
 // aqui, ou HTML cru (comunicados futuros inserem o HTML pronto direto).
+// O miolo mora em `logica.ts` e é testado em `logica_test.ts`.
 // Deploy: supabase functions deploy send-emails --no-verify-jwt
 // Secrets: CRON_SECRET, RESEND_API_KEY, SUPABASE_URL, SERVICE_KEY
-//          (EMAIL_FROM opcional, default abaixo)
+//          (EMAIL_FROM e EMAIL_TETO_DIA opcionais, defaults abaixo)
 
 import { segredoConfere } from '../_shared/cron.ts'
+import { drenar, type Item } from './logica.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
 const FROM = Deno.env.get('EMAIL_FROM') ?? 'IBSALA <nao-responda@mail.ibsala.com.br>'
+const TETO_DIA = Number(Deno.env.get('EMAIL_TETO_DIA') ?? 100)
 
 async function rest(path: string, init: RequestInit = {}) {
   const r = await fetch(`${URL_BASE}/rest/v1/${path}`, {
@@ -136,49 +143,37 @@ Deno.serve(async (req) => {
     return Response.json({ enviados: 0, motivo: 'RESEND_API_KEY ausente' })
   }
 
-  const pendentes: any[] = await rest(
-    'email_queue?enviado=eq.false&tentativas=lt.5&order=id.asc&limit=50&select=id,to_email,subject,body,tentativas')
-  if (!pendentes.length) return Response.json({ enviados: 0, pendentes: 0 })
-
-  let enviados = 0
-  let hold: number | null = null // status HTTP que travou a rodada (429/401/403)
-  for (const e of pendentes) {
-    const html = renderBody(e.body)
-    if (html === null) {
-      // template desconhecido/JSON quebrado: queima as tentativas pra sair da fila
-      await rest(`email_queue?id=eq.${e.id}`, { method: 'PATCH', body: JSON.stringify({ tentativas: 5 }) })
-      continue
-    }
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: [e.to_email], subject: e.subject, html }),
-    })
-    if (r.ok) {
-      await rest(`email_queue?id=eq.${e.id}`, { method: 'PATCH', body: JSON.stringify({ enviado: true }) })
-      enviados++
-    } else if (r.status === 429 || r.status === 401 || r.status === 403) {
-      // erro de conta, não do item: não incrementa tentativas de ninguém
-      hold = r.status
-      break
-    } else {
-      await rest(`email_queue?id=eq.${e.id}`,
-        { method: 'PATCH', body: JSON.stringify({ tentativas: e.tentativas + 1 }) })
-    }
-    await new Promise((ok) => setTimeout(ok, 600)) // Resend free: 2 req/s
-  }
+  const saida = await drenar({
+    rest,
+    render: renderBody,
+    teto: TETO_DIA,
+    // a `idem_key` da linha vira Idempotency-Key do Resend: execução que morre
+    // DEPOIS do envio e ANTES do update reenvia o mesmo item na próxima rodada,
+    // e sem esta chave o aluno receberia o email duas vezes
+    enviarEmail: async (e: Item, html: string) => {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${RESEND_KEY}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': e.idem_key,
+        },
+        body: JSON.stringify({ from: FROM, to: [e.to_email], subject: e.subject, html }),
+      })
+      return { ok: r.ok, status: r.status }
+    },
+  })
 
   // o `hold` só existia no corpo de uma resposta que ninguém lê: a fila podia
   // ficar parada dias com a key errada e o sintoma era "o email não chegou"
-  const presos = pendentes.filter((p: any) => p.tentativas >= 4).length
   await rest('config?on_conflict=key', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates' },
     body: JSON.stringify([{
       key: 'ultimo_email_drain',
-      value: { em: new Date().toISOString(), enviados, pendentes: pendentes.length, hold, presos },
+      value: { em: new Date().toISOString(), ...saida },
     }]),
   }).catch(() => {})
 
-  return Response.json({ enviados, pendentes: pendentes.length, hold, presos })
+  return Response.json(saida)
 })
