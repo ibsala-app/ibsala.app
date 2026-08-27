@@ -55,6 +55,13 @@ PARES = [
     ('input', 'text', 'surface', 4.5),
     ('link-botao', 'blue-2', 'bg2', 4.5),
     ('bloqueio-card p', 'text-dim', 'surface', 4.5),
+    # pós-graduação: a fonte da coordenação da pós, em vermelho. A cor nunca é o
+    # único sinal (a etiqueta PÓS acompanha), mas o contraste tem que fechar
+    # igual, nos dois temas.
+    ('etiqueta PÓS', 'pos-sobre-vermelho', 'pos-vermelho', 4.5),
+    ('cartão pós .disc', 'text', 'pos-suave', 4.5),
+    ('cartão pós .meta', 'text-muted', 'pos-suave', 4.5),
+    ('cartão pós .curso', 'pos-texto', 'pos-suave', 4.5),
 ]
 
 
