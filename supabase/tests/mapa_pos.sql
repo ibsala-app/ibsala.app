@@ -101,7 +101,10 @@ select testes.ok(
 -- é o `apagarFantasmas` da captura: apaga por dia e por `capturado`, sem filtro
 -- de origem
 
-delete from public.mapa_dia where data = current_date and capturado < now();
+-- dentro de uma transação `now()` é o instante do BEGIN, então `capturado <
+-- now()` não pegaria as linhas criadas aqui. O que importa provar é o efeito:
+-- apagar o dia inteiro da graduação não encosta na pós.
+delete from public.mapa_dia where data = current_date;
 select testes.ok((select count(*) from public.mapa_pos) = 1,
   'apagar o mapa do dia inteiro não apaga a pós');
 
