@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=38">
+  <link rel="stylesheet" href="style.css?v=39">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -416,11 +416,18 @@
             <h2 class="secao">Reclamações</h2>
             <ol id="admin-reclamacoes" class="board"></ol>
             <p id="admin-reclamacoes-vazio" class="vazio" hidden>Nenhuma reclamação aberta.</p>
+            <button id="btn-recs-mais" class="botao-raso" hidden>Ver mais reclamações</button>
           </div>
           <div class="coluna">
-            <h2 class="secao">Alunos</h2>
+            <h2 class="secao">Alunos <span id="admin-alunos-total"></span></h2>
+            <label class="busca-wrap">
+              <span class="rotulo-campo">Buscar aluno por username ou e-mail</span>
+              <input id="admin-busca" type="search" placeholder="username ou e-mail"
+                     autocomplete="off" enterkeyhint="search">
+            </label>
             <ol id="admin-alunos" class="board"></ol>
             <p id="admin-alunos-vazio" class="vazio" hidden>Nenhum aluno cadastrado.</p>
+            <button id="btn-alunos-mais" class="botao-raso" hidden>Ver mais alunos</button>
           </div>
         </div>
       </div>
@@ -437,6 +444,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=38"></script>
+  <script type="module" src="app.js?v=39"></script>
 </body>
 </html>
