@@ -469,13 +469,17 @@ main {
   vertical-align: 1px;
 }
 
-/* o curso é o que diferencia duas linhas da pós entre si, então ele não é meta:
-   fica na cor da própria origem */
+/* O curso é o que diferencia duas linhas da pós entre si, então ele não é meta:
+   fica na cor da própria origem e numa linha própria. `dias` é a faixa que a
+   lista já reserva embaixo da meta e que a pós não usa para outra coisa; sem
+   isso curso e professor caem na MESMA célula do grid e se sobrepõem, que foi o
+   que o render dos dois temas mostrou. */
 .board li[data-origem="pos"] .curso {
-  grid-area: meta;
+  grid-area: dias;
   font-size: var(--t-sm);
   color: var(--pos-texto);
   font-weight: 600;
+  padding-top: 2px;
 }
 
 .board li[data-origem="pos"] .sala {
