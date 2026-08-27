@@ -18,8 +18,16 @@
 // Python e pra cá e exige payload idêntico. É o que impede o porte de
 // reintroduzir o defeito da 114.
 
-import repertorioJson from '../_shared/salas-repertorio.json' with { type: 'json' }
 import { segredoConfere } from '../_shared/cron.ts'
+import { lerCsv } from '../_shared/csv.ts'
+import {
+  carregarRepertorio,
+  chave,
+  ladosDaBarra,
+  type Repertorio,
+  resolverSala,
+  semAcento,
+} from '../_shared/repertorio.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -37,17 +45,6 @@ const TITULOS_CATEGORIA = [
 
 // ── normalização ─────────────────────────────────────────────────────────────
 
-function semAcento(texto: unknown): string {
-  return String(texto ?? '').normalize('NFD').replace(/\p{Mn}/gu, '').trim()
-}
-
-/** Chave de casamento: sem acento, SEM pontuação, espaço colapsado, maiúscula.
- *  A barra sobrevive de propósito: resolverSala depende dela. */
-function chave(texto: unknown): string {
-  return semAcento(texto).toUpperCase().replace(/[().\-]/g, ' ')
-    .replace(/\s+/g, ' ').trim()
-}
-
 function extrairCodigo(texto: unknown): [string, string] {
   const s = String(texto ?? '')
   if (s.includes('/')) {
@@ -55,68 +52,6 @@ function extrairCodigo(texto: unknown): [string, string] {
     return [s.slice(0, i).trim(), s.slice(i + 1).trim()]
   }
   return ['', s.trim()]
-}
-
-// ── repertório ───────────────────────────────────────────────────────────────
-
-type Repertorio = {
-  salas: Map<string, string>
-  predio: Record<string, string>
-  apelidos: Map<string, string>
-  ignoradas: Set<string>
-}
-
-function carregarRepertorio(rep = repertorioJson as any): Repertorio {
-  // com chave insensível a pontuação dois rótulos podem colapsar; se apontarem
-  // pra salas diferentes é ambiguidade silenciosa, e é melhor morrer aqui
-  const visto = new Map<string, [string, string, string | null]>()
-  const registrar = (rotulo: string, canon: string | null, origem: string) => {
-    const k = chave(rotulo)
-    const anterior = visto.get(k)
-    if (anterior && anterior[2] !== canon) {
-      throw new Error(
-        `repertório ambíguo: a chave "${k}" sai de ${anterior[0]} ` +
-        `"${anterior[1]}" -> ${anterior[2]} e de ${origem} "${rotulo}" -> ${canon}`)
-    }
-    visto.set(k, [origem, rotulo, canon])
-    return k
-  }
-
-  const salas = new Map<string, string>()
-  const apelidos = new Map<string, string>()
-  const ignoradas = new Set<string>()
-  for (const s of Object.keys(rep.salas)) salas.set(registrar(s, s, 'canonica'), s)
-  for (const [a, c] of Object.entries(rep.apelidos)) {
-    apelidos.set(registrar(a, c as string, 'apelido'), c as string)
-  }
-  for (const i of rep.ignoradas) ignoradas.add(registrar(i, null, 'ignorada'))
-
-  return { salas, predio: { ...rep.salas }, apelidos, ignoradas }
-}
-
-function ladosDaBarra(bruta: string, rep: Repertorio): string[] {
-  const achadas: string[] = []
-  for (const parte of String(bruta).split('/')) {
-    const k = chave(parte)
-    if (rep.salas.has(k)) achadas.push(rep.salas.get(k)!)
-    else if (rep.apelidos.has(k)) achadas.push(rep.apelidos.get(k)!)
-  }
-  return [...new Set(achadas)]
-}
-
-function resolverSala(bruta: unknown, rep: Repertorio): [string | null, string] {
-  const k = chave(bruta)
-  if (!k) return [null, 'vazia']
-  if (rep.ignoradas.has(k)) return [null, 'ignorada']
-  if (rep.salas.has(k)) return [rep.salas.get(k)!, 'canonica']
-  if (rep.apelidos.has(k)) return [rep.apelidos.get(k)!, 'apelido']
-  if (k.includes('/')) {
-    const lados = ladosDaBarra(String(bruta), rep)
-    if (lados.length === 1) return [lados[0], 'apelido-barra']
-    if (lados.length > 1) return [null, 'barra-multipla']
-    return [null, 'ignorada']
-  }
-  return [null, 'desconhecida']
 }
 
 function anotarCanonicas(linhas: any[], rep: Repertorio) {
@@ -130,35 +65,6 @@ function anotarCanonicas(linhas: any[], rep: Repertorio) {
     else if (motivo === 'barra-multipla') multiplas[bruta] = ladosDaBarra(bruta, rep)
   }
   return { pendentes, multiplas }
-}
-
-// ── CSV ──────────────────────────────────────────────────────────────────────
-
-/** CSV do export do Google: campo entre aspas, aspas dobradas, CRLF ou LF.
- *  Escrito à mão pra não depender de import externo no caminho do cron. */
-function lerCsv(texto: string): string[][] {
-  const linhas: string[][] = []
-  let campo = ''
-  let linha: string[] = []
-  let dentroDeAspas = false
-  const t = texto.charCodeAt(0) === 0xfeff ? texto.slice(1) : texto   // BOM
-
-  for (let i = 0; i < t.length; i++) {
-    const c = t[i]
-    if (dentroDeAspas) {
-      if (c === '"') {
-        if (t[i + 1] === '"') { campo += '"'; i++ } else dentroDeAspas = false
-      } else campo += c
-      continue
-    }
-    if (c === '"') { dentroDeAspas = true; continue }
-    if (c === ',') { linha.push(campo); campo = ''; continue }
-    if (c === '\r') continue
-    if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; continue }
-    campo += c
-  }
-  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha) }
-  return linhas
 }
 
 function hojeISO(): string {
