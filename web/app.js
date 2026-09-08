@@ -1,12 +1,27 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=42'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=43'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
 // no cutover (o SW do v1 derrubava o jsdelivr e sobrevivia por isso)
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
+// Alguns navegadores corporativos e extensoes interceptam `register` e rejeitam
+// a promise. Isso nao pode virar excecao global nem deixar os controles de push
+// esperando `navigator.serviceWorker.ready` para sempre: o restante do IBSALA
+// funciona normalmente sem a casca offline.
+const registroServiceWorker = 'serviceWorker' in navigator
+  ? navigator.serviceWorker.register('/sw.js').catch((erro) => {
+      console.warn('Service worker indisponivel neste navegador.', erro)
+      return null
+    })
+  : Promise.resolve(null)
+
+async function serviceWorkerPronto() {
+  const novo = await registroServiceWorker
+  if (novo) return novo
+  try { return await navigator.serviceWorker?.getRegistration() ?? null } catch { return null }
+}
 
 // PWA instalada no iPhone não faz navegação nova quando o iOS traz o app de
 // volta do segundo plano: ele restaura a página que já estava na memória. Sem
@@ -1105,7 +1120,8 @@ function b64ParaUint8(b64) {
 
 async function subAtual() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null
-  const reg = await navigator.serviceWorker.ready
+  const reg = await serviceWorkerPronto()
+  if (!reg) return null
   return reg.pushManager.getSubscription()
 }
 
@@ -1127,6 +1143,14 @@ async function atualizarBotaoPush() {
     // contrário do que o rótulo acabou de dizer
     dica.textContent = 'Este navegador não entrega notificação. No iPhone, use o ' +
       'Safari com o app na Tela de Início; no computador, Chrome, Edge ou Firefox.'
+    pintarTesteDePush()
+    return
+  }
+  if (!await serviceWorkerPronto()) {
+    chk.disabled = true
+    chk.checked = false
+    rotulo.textContent = 'Avisos indisponíveis neste navegador'
+    dica.textContent = 'O navegador bloqueou o componente usado para entregar notificações.'
     pintarTesteDePush()
     return
   }
@@ -1306,7 +1330,8 @@ on('chk-push', 'change', async (e) => {
     }
     const perm = await pedido
     if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
-    const reg = await navigator.serviceWorker.ready
+    const reg = await serviceWorkerPronto()
+    if (!reg) { toast('Este navegador bloqueou os avisos.'); return }
     const nova = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
