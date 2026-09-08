@@ -85,6 +85,13 @@ def main():
     # voltar a escrever o caminho cru, o precache deixa de casar com o pedido real
     ok &= conferir('sw.js monta o SHELL a partir do CACHE',
                    "CACHE.split('-').pop()" in sw and '`/app.js?v=${V}`' in sw)
+    # IBSALA-4: navegadores corporativos podem rejeitar o registro. Sem o
+    # `catch`, a rejeição vira erro global; usando `ready`, os controles de push
+    # ainda podem esperar para sempre quando nenhum worker chega a ativar.
+    ok &= conferir('registro do service worker trata rejeição',
+                   "register('/sw.js').catch" in app)
+    ok &= conferir('push não espera serviceWorker.ready indefinidamente',
+                   'await navigator.serviceWorker.ready' not in app)
 
     # o bundle do supabase-js fica sob `immutable` de um ano e NÃO tem `?v=`: se
     # ele mudasse de conteúdo com o mesmo nome, quem já abriu o app ficaria com a
