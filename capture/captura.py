@@ -34,12 +34,30 @@ TITULOS_CATEGORIA = [
     "OUTRAS RESERVAS - NOITE",
 ]
 
+# A coordenação edita os títulos direto na planilha. Em 11/09/2026,
+# "GRADUAÇÃO - MANHÃ" virou "GRADUAÇÃO - Manhã" e a comparação literal
+# descartou o bloco inteiro da manhã. A chave tolera caixa, acento, pontuação e
+# espaços, mas a lista continua fechada para não deixar seções de sábado
+# vazarem para o mapa de sexta.
+CATEGORIAS_POR_CHAVE = {
+    "GRADUACAO MANHA": "GRADUAÇÃO - MANHÃ",
+    "GRADUACAO TARDE": "GRADUAÇÃO - TARDE",
+    "GRADUACAO NOITE": "GRADUAÇÃO - NOITE",
+    "OUTRAS RESERVAS NOITE": "OUTRAS RESERVAS - NOITE",
+    "OUTRAS RESERVAS": "OUTRAS RESERVAS",
+}
+
 BRT = ZoneInfo("America/Sao_Paulo")
 
 
 def _sem_acento(texto):
     nfd = unicodedata.normalize("NFD", str(texto))
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn").strip()
+
+
+def _chave_categoria(texto):
+    sem_pontuacao = re.sub(r"[^A-Z0-9]+", " ", _sem_acento(texto).upper())
+    return re.sub(r"\s+", " ", sem_pontuacao).strip()
 
 
 def _extrair_codigo(texto):
@@ -188,8 +206,9 @@ def parsear(texto_csv):
         col0 = valores[0].strip() if valores else ""
         resto_vazio = all(not v.strip() for v in valores[1:])
 
-        if col0 in TITULOS_CATEGORIA and resto_vazio:
-            categoria = col0
+        categoria_reconhecida = CATEGORIAS_POR_CHAVE.get(_chave_categoria(col0))
+        if categoria_reconhecida and resto_vazio:
+            categoria = categoria_reconhecida
             colunas = None
             continue
 

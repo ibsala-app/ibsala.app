@@ -17,6 +17,18 @@ export const TITULOS_CATEGORIA = [
   'OUTRAS RESERVAS - NOITE',
 ]
 
+// A coordenação edita estes títulos direto na planilha. Em 11/09/2026,
+// "GRADUAÇÃO - MANHÃ" virou "GRADUAÇÃO - Manhã" e a comparação literal
+// descartou todas as aulas da manhã. A lista segue fechada para não absorver
+// acidentalmente a seção de sábado.
+const CATEGORIAS_POR_CHAVE: Record<string, string> = {
+  'GRADUACAO MANHA': 'GRADUAÇÃO - MANHÃ',
+  'GRADUACAO TARDE': 'GRADUAÇÃO - TARDE',
+  'GRADUACAO NOITE': 'GRADUAÇÃO - NOITE',
+  'OUTRAS RESERVAS NOITE': 'OUTRAS RESERVAS - NOITE',
+  'OUTRAS RESERVAS': 'OUTRAS RESERVAS',
+}
+
 // ── normalização ─────────────────────────────────────────────────────────────
 
 /** Data de hoje em BRT. Entra por parâmetro em `parsear` para o teste poder
@@ -32,6 +44,10 @@ export function extrairCodigo(texto: unknown): [string, string] {
     return [s.slice(0, i).trim(), s.slice(i + 1).trim()]
   }
   return ['', s.trim()]
+}
+
+function chaveCategoria(texto: unknown): string {
+  return semAcento(texto).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export function anotarCanonicas(linhas: any[], rep: Repertorio) {
@@ -58,8 +74,9 @@ export function parsear(textoCsv: string, hoje = hojeISO()): any[] {
     const col0 = (valores[0] ?? '').trim()
     const restoVazio = valores.slice(1).every((v) => !v.trim())
 
-    if (TITULOS_CATEGORIA.includes(col0) && restoVazio) {
-      categoria = col0
+    const categoriaReconhecida = CATEGORIAS_POR_CHAVE[chaveCategoria(col0)]
+    if (categoriaReconhecida && restoVazio) {
+      categoria = categoriaReconhecida
       colunas = null
       continue
     }

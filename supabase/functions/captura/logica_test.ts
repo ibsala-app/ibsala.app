@@ -56,6 +56,28 @@ Deno.test('a 114 com barra continua ocupando a 114', () => {
   assertEquals(l.sala_canon, '114')
 })
 
+Deno.test('título atual da manhã tolera caixa, acento e espaços', () => {
+  const atual = `GRADUAÇÃO - Manhã     ,,,,,,,
+Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
+4 ENG/4 E.COMP,IBM0731-8001/ELETRICIDADE E ELETROMAGNETISMO,SERGIO,07:30/09:20,114 LAB QUIMICA/FISICA,SEXTA,11/set.,
+`
+  const linhas = parsear(atual, '2026-09-11')
+  assertEquals(linhas.length, 1)
+  assertEquals(linhas[0].categoria, 'GRADUAÇÃO - MANHÃ')
+  assertEquals(linhas[0].codigo, 'IBM0731-8001')
+  assertEquals(linhas[0].sala, '114 LAB QUIMICA/FISICA')
+})
+
+Deno.test('outras reservas sem sufixo continua reconhecida', () => {
+  const atual = `OUTRAS RESERVAS,,,,,,,
+Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
+GRAD,MONITORIA - CÁLCULO,THIAGO,11:40/12:40,106,SEXTA,11/set.,
+`
+  const linhas = parsear(atual, '2026-09-11')
+  assertEquals(linhas.length, 1)
+  assertEquals(linhas[0].categoria, 'OUTRAS RESERVAS')
+})
+
 Deno.test('sala fora do repertório vai pra quarentena, não vira sala', () => {
   assertEquals(payload().pendentes['SALA DO CAFE'], 2)
 })

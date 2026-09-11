@@ -36,6 +36,28 @@ def test_dia_letivo():
     assert linhas[2]["codigo"] == ""  # sem "/" na disciplina
 
 
+def test_titulo_da_manha_tolera_caixa_acentos_e_espacos():
+    csv = """GRADUAÇÃO - Manhã     ,,,,,,,
+Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
+4 ENG/4 E.COMP,IBM0731-8001/ELETRICIDADE E ELETROMAGNETISMO,SERGIO,07:30/09:20,114 LAB QUIMICA/FISICA,SEXTA,11/set.,
+"""
+    linhas = parsear(csv)
+    assert len(linhas) == 1
+    assert linhas[0]["categoria"] == "GRADUAÇÃO - MANHÃ"
+    assert linhas[0]["codigo"] == "IBM0731-8001"
+    assert linhas[0]["sala"] == "114 LAB QUIMICA/FISICA"
+
+
+def test_outras_reservas_sem_sufixo_continua_reconhecida():
+    csv = """OUTRAS RESERVAS,,,,,,,
+Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
+GRAD,MONITORIA - CÁLCULO,THIAGO,11:40/12:40,106,SEXTA,11/set.,
+"""
+    linhas = parsear(csv)
+    assert len(linhas) == 1
+    assert linhas[0]["categoria"] == "OUTRAS RESERVAS"
+
+
 def test_ferias_sem_lixo():
     # títulos de seção perdidos (inclusive o typo "GRADUÇÃO - SÁBADO" da
     # planilha real) não viram linha do mapa
