@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=44'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=45'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -65,7 +65,9 @@ async function procurarAtualizacao() {
 // CDN, esta linha lançava e matava o módulo inteiro, então NENHUM botão da página
 // respondia (os listeners de clique nem chegavam a ser registrados). Agora, se o
 // bundle faltar, a navegação continua funcionando e o app diz o que aconteceu.
-const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY) ?? null
+const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { flowType: 'pkce' },
+}) ?? null
 
 // ── Slots (portado do v1) ────────────────────────────────────────────────────
 // Janela de vigência do slot, não o horário da aula: serve pra dizer "em que
