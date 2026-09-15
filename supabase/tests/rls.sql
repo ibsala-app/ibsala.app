@@ -223,6 +223,25 @@ select testes.ok(
     is null,
   'reclamação resolvida libera vaga na fila');
 
+-- 0021: a quota conta aberta, então nascer resolvida era o furo
+select testes.ok(
+  testes.como('11111111-1111-1111-1111-111111111111',
+    $$insert into public.reclamacoes (aluno_id, descricao, resolvido_em)
+      values (auth.uid(), 'fura fila', 'infinity')$$) = '42501',
+  'aluno não cria reclamação já resolvida');
+
+select testes.ok(
+  testes.como('11111111-1111-1111-1111-111111111111',
+    $$insert into public.reclamacoes (aluno_id, descricao, criado)
+      values (auth.uid(), 'fura ordem', now() - interval '1 year')$$) = '42501',
+  'aluno não forja a data da reclamação');
+
+select testes.ok(
+  testes.como('11111111-1111-1111-1111-111111111111',
+    $$insert into public.reclamacoes (aluno_id, descricao)
+      values (auth.uid(), repeat('x', 501))$$) = '23514',
+  'descrição acima de 500 caracteres é recusada');
+
 insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
 select 'https://fcm.googleapis.com/fcm/send/' || i, '11111111-1111-1111-1111-111111111111', 'p', 'a'
   from generate_series(1, 10) i;
