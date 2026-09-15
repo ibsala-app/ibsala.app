@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=43'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=44'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -1637,7 +1637,24 @@ on('btn-login', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   if (error) toast('Não deu pra abrir o login do Google. Tenta de novo.')
 }))
 
+// Sair desliga o aviso deste aparelho. Sem isso a inscrição ficava no banco e o
+// celular seguia recebendo sala, disciplina e professor de quem saiu, inclusive
+// num aparelho emprestado ou de laboratório.
+async function desligarPushDoAparelho() {
+  try {
+    const sub = await comTeto(subAtual(), 4000)
+    if (!sub) return
+    // o banco primeiro, enquanto a sessão ainda vale. Se falhar, o unsubscribe
+    // basta: o push service passa a responder 410 e o push-slot apaga a linha
+    await chamar(sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint), 4000)
+    await sub.unsubscribe()
+  } catch {
+    // sair nunca fica preso por causa do aviso
+  }
+}
+
 on('btn-sair', 'click', (ev) => ocupado(ev.currentTarget, async () => {
+  await desligarPushDoAparelho()
   const { error } = await sb.auth.signOut()
   toast(error ? 'Não deu pra sair. Tenta de novo.' : 'Você saiu.')
 }))
