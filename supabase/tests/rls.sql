@@ -224,22 +224,51 @@ select testes.ok(
   'reclamação resolvida libera vaga na fila');
 
 insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
-select 'https://push.exemplo/' || i, '11111111-1111-1111-1111-111111111111', 'p', 'a'
+select 'https://fcm.googleapis.com/fcm/send/' || i, '11111111-1111-1111-1111-111111111111', 'p', 'a'
   from generate_series(1, 10) i;
 
 select testes.ok(
   testes.como('11111111-1111-1111-1111-111111111111',
     $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
-      values ('https://push.exemplo/11', auth.uid(), 'p', 'a')$$) = 'P0001',
+      values ('https://fcm.googleapis.com/fcm/send/11', auth.uid(), 'p', 'a')$$) = 'P0001',
   'o 11º aparelho é recusado');
 
 select testes.ok(
   testes.como('11111111-1111-1111-1111-111111111111',
     $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
-      values ('https://push.exemplo/3', auth.uid(), 'p2', 'a2')
+      values ('https://fcm.googleapis.com/fcm/send/3', auth.uid(), 'p2', 'a2')
       on conflict (endpoint) do update set p256dh = excluded.p256dh, auth = excluded.auth$$)
     is null,
   'renovar inscrição que já existe continua passando no limite');
+
+-- ---------------------------------------------------------------------------
+-- 6b. endpoint de push só em push service conhecido (0020)
+-- ---------------------------------------------------------------------------
+-- o aluno 2 está bloqueado e o 1 já está no teto: o admin é quem tem vaga
+
+select testes.ok(
+  testes.como('33333333-3333-3333-3333-333333333333',
+    $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
+      values ('https://127.0.0.1:5432/', auth.uid(), 'p', 'a')$$) = '23514',
+  'endpoint na rede interna é recusado');
+
+select testes.ok(
+  testes.como('33333333-3333-3333-3333-333333333333',
+    $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
+      values ('https://fcm.googleapis.com.atacante.com/x', auth.uid(), 'p', 'a')$$) = '23514',
+  'host que só começa igual ao FCM é recusado');
+
+select testes.ok(
+  testes.como('33333333-3333-3333-3333-333333333333',
+    $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
+      values ('https://web.push.apple.com/abc', auth.uid(), repeat('p', 500), 'a')$$) = '23514',
+  'chave p256dh gigante é recusada');
+
+select testes.ok(
+  testes.como('33333333-3333-3333-3333-333333333333',
+    $$insert into public.push_subscriptions (endpoint, aluno_id, p256dh, auth)
+      values ('https://web.push.apple.com/abc', auth.uid(), 'p', 'a')$$) is null,
+  'inscrição do iPhone continua entrando');
 
 -- ---------------------------------------------------------------------------
 -- 7. escrita nas tabelas de captura
