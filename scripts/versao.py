@@ -92,6 +92,8 @@ def main():
                    "register('/sw.js').catch" in app)
     ok &= conferir('push não espera serviceWorker.ready indefinidamente',
                    'await navigator.serviceWorker.ready' not in app)
+    ok &= conferir('cliente Supabase usa PKCE',
+                   "auth: { flowType: 'pkce' }" in app)
 
     # o bundle do supabase-js fica sob `immutable` de um ano e NÃO tem `?v=`: se
     # ele mudasse de conteúdo com o mesmo nome, quem já abriu o app ficaria com a
