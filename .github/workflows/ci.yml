@@ -5,13 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+# O GITHUB_TOKEN só lê. O repositório é público e publica em produção a cada
+# push na main: action de terceiro com token de escrita é o caminho mais curto
+# pra alguém reescrever o ibsala.com.br. Ação presa por SHA pelo mesmo motivo,
+# tag de release pode ser movida pra outro commit.
+permissions:
+  contents: read
+
 jobs:
   testes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - run: pip install pytest
@@ -23,8 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - run: python scripts/contraste.py
@@ -35,12 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # o bump de versao se mede contra origin/main, entao o historico
           # precisa vir junto (mesmo motivo do job gitleaks)
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       # HTML, JS, CSS e service worker apontando pro mesmo ?v=. Sem isso o
@@ -58,8 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:
           deno-version: v2.x
       - run: deno check supabase/functions/*/index.ts supabase/functions/_shared/*.ts supabase/functions/*/logica.ts
@@ -74,10 +81,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
         with:
-          version: latest
+          # a que rodou verde em 15/09; `latest` trocava o banco do teste sem aviso
+          version: 2.117.0
       - run: supabase db start
       - name: RLS, grants e quotas
         run: |
@@ -89,11 +97,15 @@ jobs:
 
   gitleaks:
     runs-on: ubuntu-latest
+    # a action lista os commits do PR pela API
+    permissions:
+      contents: read
+      pull-requests: read
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
