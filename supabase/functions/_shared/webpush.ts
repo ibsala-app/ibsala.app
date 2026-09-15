@@ -3,6 +3,7 @@
 // de teste, duplicar significaria duas cópias do setVapidDetails e duas regras
 // diferentes pra inscrição morta.
 import webpush from 'npm:web-push@3.6.7'
+import { endpointConhecido } from './push-hosts.ts'
 
 webpush.setVapidDetails(
   'mailto:ibsala.app@gmail.com',
@@ -31,6 +32,10 @@ function comTeto<T>(p: Promise<T>, ms: number): Promise<T> {
 // 'enviado' | 'morta' (404/410: o push service não conhece mais o endpoint, quem
 // chamou tem que apagar a linha) | 'falha' (o resto, que vale tentar de novo)
 export async function enviar(s: Inscricao, payload: unknown) {
+  // host fora da lista nem chega na rede. 'falha' e não 'morta': apagar a linha
+  // é decisão de push service, e um host legítimo que faltou na lista não pode
+  // custar a inscrição de ninguém
+  if (!endpointConhecido(s.endpoint)) return 'falha' as const
   try {
     await comTeto(
       webpush.sendNotification(
