@@ -30,14 +30,15 @@ $$;
 /* Roda `sql` com a identidade de um usuário do app e devolve o SQLSTATE do erro,
    ou null quando passou. `set_config(..., true)` é local da transação, então a
    troca de papel não vaza para o teste seguinte. */
-create function testes.como(uid uuid, sql text, papel text default 'authenticated')
+create function testes.como(uid uuid, sql text, papel text default 'authenticated',
+                            email text default 'a1@ibmec.edu.br')
 returns text
 language plpgsql as $$
 declare
   estado text;
 begin
   perform set_config('request.jwt.claims',
-    json_build_object('sub', uid, 'role', papel, 'email', 'a1@ibmec.edu.br')::text, true);
+    json_build_object('sub', uid, 'role', papel, 'email', email)::text, true);
   perform set_config('role', papel, true);
   begin
     execute sql;
@@ -124,6 +125,55 @@ select testes.ok(
   (select ultimo_acesso is not null from public.alunos
     where id = '11111111-1111-1111-1111-111111111111'),
   'e a RPC de fato carimbou a coluna');
+
+-- a flag do touch fica acesa até o fim da transação: uma segunda operação na
+-- mesma transação (mutation GraphQL de dois campos) não pode escolher o valor
+select testes.ok(
+  testes.como('11111111-1111-1111-1111-111111111111',
+    $$select set_config('ibsala.touch', '1', true)$$) is null,
+  'flag do touch acesa, como depois da RPC');
+
+select testes.ok(
+  testes.como('11111111-1111-1111-1111-111111111111',
+    $$update public.alunos set ultimo_acesso = '2099-01-01' where id = auth.uid()$$) = '42501',
+  'com a flag acesa, ultimo_acesso no futuro continua recusado');
+
+select set_config('ibsala.touch', '', true);
+
+-- ---------------------------------------------------------------------------
+-- 2b. cadastro: datas e aceite carimbados pelo servidor (0022)
+-- ---------------------------------------------------------------------------
+
+insert into auth.users (id, email) values
+  ('44444444-4444-4444-4444-444444444444', 'novo@ibmec.edu.br'),
+  ('55555555-5555-5555-5555-555555555555', 'velho@ibmec.edu.br');
+
+select testes.ok(
+  testes.como('44444444-4444-4444-4444-444444444444',
+    $$insert into public.alunos (id, username, email, criado, ultimo_acesso, termos_em, termos_versao)
+      values (auth.uid(), 'aluno.novo', 'novo@ibmec.edu.br',
+              '2099-01-01', '2099-01-01', '2099-01-01', '1-2026-08-12')$$,
+    'authenticated', 'novo@ibmec.edu.br') is null,
+  'cadastro com datas forjadas entra');
+
+select testes.ok(
+  (select criado <= now() and ultimo_acesso <= now() and termos_em <= now()
+     from public.alunos where id = '44444444-4444-4444-4444-444444444444'),
+  'e as três datas saem carimbadas pelo servidor, não pelo corpo');
+
+select testes.ok(
+  testes.como('55555555-5555-5555-5555-555555555555',
+    $$insert into public.alunos (id, username, email, termos_em, termos_versao)
+      values (auth.uid(), 'aluno.velho', 'velho@ibmec.edu.br', now(), '0-anterior-aos-termos')$$,
+    'authenticated', 'velho@ibmec.edu.br') = '23514',
+  'cadastro novo não usa a versão retroativa dos termos');
+
+select testes.ok(
+  testes.como('55555555-5555-5555-5555-555555555555',
+    $$insert into public.alunos (id, username, email)
+      values (auth.uid(), 'aluno.velho', 'velho@ibmec.edu.br')$$,
+    'authenticated', 'velho@ibmec.edu.br') = '42501',
+  'cadastro sem aceite continua recusado');
 
 -- ---------------------------------------------------------------------------
 -- 3. aluno bloqueado
