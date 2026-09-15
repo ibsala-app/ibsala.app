@@ -47,6 +47,10 @@ Deno.serve(async (req) => {
 
   // confirmação de exclusão (best-effort; o cron email-drain envia)
   if (aluno?.email) {
+    // a fila não tem FK pra alunos, então o cascade não chega nela: o endereço
+    // ficava no welcome, nos comunicados e, se o envio tinha falhado 5 vezes,
+    // pra sempre, enquanto o email abaixo diz que tudo foi removido
+    await admin.from('email_queue').delete().eq('to_email', aluno.email)
     await admin.from('email_queue').insert({
       to_email: aluno.email,
       subject: '[IBSALA] Sua conta foi excluída',

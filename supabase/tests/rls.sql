@@ -354,4 +354,10 @@ select testes.ok(
     $$delete from public.alunos where id = auth.uid()$$) = '42501',
   'exclusão de conta continua sendo só pela edge function');
 
+-- 0023: email que esgotou as tentativas também sai depois de 30 dias
+select testes.ok(
+  (select count(*) = 1 and bool_and(command like '%tentativas >= 5%')
+     from cron.job where jobname = 'email-queue-retencao'),
+  'retenção da fila apaga também o email que nunca saiu, num job só');
+
 rollback;
