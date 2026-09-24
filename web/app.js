@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=46'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=47'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -510,14 +510,38 @@ function pintarRelogio() {
   }
 }
 
+// Mesma chave da captura (`_chave` em captura.py): sem acento, sem pontuação,
+// maiúscula. A barra sobrevive porque é ela que separa as duas salas.
+const chaveSala = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[().\-]/g, ' ').replace(/\s+/g, ' ').trim()
+
+// Salas que uma linha do mapa ocupa. A captura resolve UMA canônica por linha e
+// deixa `sala_canon` nulo quando o rótulo junta duas salas de verdade
+// ("302/303", motivo `barra-multipla`). Em 24/09 eram 43 aulas assim, e nenhuma
+// tirava sala da lista de livres: 302 e 303 apareciam livres com Arquitetura de
+// Computadores dentro. Por decisão do Josh, par de salas ocupa as DUAS. Cada lado
+// casa com a canônica, ou com "NNN (P2)" -> "P2-NNN"; lado que não casa (auditório,
+// foyer, texto solto) simplesmente não ocupa nada.
+function salasDaLinha(r) {
+  if (r.sala_canon) return [r.sala_canon]
+  if (!String(r.sala ?? '').includes('/')) return []
+  const porChave = new Map(salas.map((x) => [chaveSala(x.sala), x.sala]))
+  const achadas = String(r.sala).split('/').map((lado) => {
+    const k = chaveSala(lado)
+    const p2 = k.match(/^(\d{3}) P2\b/)
+    return porChave.get(k) ?? (p2 ? porChave.get(`P2 ${p2[1]}`) : undefined)
+  }).filter(Boolean)
+  return [...new Set(achadas)]
+}
+
 // Ocupada é sobreposição de horário com a janela do turno, não "o turno do
 // primeiro horário" (o porquê está em intervaloCobreSlot).
 function livresNoSlot(chave) {
   const s = SLOTS[chave]
   if (!s) return []
   const ocupadas = new Set(mapaHoje
-    .filter((r) => r.sala_canon && intervaloCobreSlot(r.horario, s))
-    .map((r) => r.sala_canon))
+    .filter((r) => intervaloCobreSlot(r.horario, s))
+    .flatMap(salasDaLinha))
   return salas.filter((x) => !ocupadas.has(x.sala))
 }
 
@@ -579,8 +603,8 @@ function recorteLivres() {
     // livre até o fim é livre em TODOS os turnos que faltam: basta uma aula em
     // qualquer um deles para a sala sair da lista
     const ocupadas = new Set(mapaHoje
-      .filter((r) => r.sala_canon && daqui.some((k) => intervaloCobreSlot(r.horario, SLOTS[k])))
-      .map((r) => r.sala_canon))
+      .filter((r) => daqui.some((k) => intervaloCobreSlot(r.horario, SLOTS[k])))
+      .flatMap(salasDaLinha))
     return {
       livres: salas.filter((x) => !ocupadas.has(x.sala)),
       rotulo: daqui[0] === atual
