@@ -132,10 +132,13 @@
 
             <!-- o app só sabia responder "agora": quem procura onde estudar às
                  19h tinha que esperar as 19h pra descobrir -->
-            <label class="linha-switch" for="chk-dia-todo">
-              <span class="linha-switch-texto">Ver o resto do dia</span>
-              <input type="checkbox" id="chk-dia-todo" class="switch" role="switch">
-            </label>
+            <div id="filtro-livres" class="segmentado filtro-livres" role="radiogroup"
+                 aria-label="Que salas livres mostrar">
+              <button type="button" data-filtro="agora" role="radio" aria-checked="true">Agora</button>
+              <button type="button" data-filtro="proximo" role="radio" aria-checked="false">Próximo turno</button>
+              <button type="button" data-filtro="fim" role="radio" aria-checked="false">Até o fim do dia</button>
+              <button type="button" data-filtro="turnos" role="radio" aria-checked="false">Turno a turno</button>
+            </div>
             <div id="livres-turnos" hidden></div>
           </div>
 
@@ -157,7 +160,7 @@
                entra na conta de salas livres: sem horário não dá pra dizer em
                qual turno a sala está ocupada. -->
           <div id="bloco-pos" hidden>
-            <h2 class="secao">Pós-graduação hoje</h2>
+            <h2 class="secao" id="pos-titulo">Pós-graduação hoje</h2>
             <ol id="board-pos" class="board"></ol>
             <p class="vazio">Fonte da coordenação da pós. Sem horário na planilha, estas aulas
               não entram na conta de salas livres.</p>

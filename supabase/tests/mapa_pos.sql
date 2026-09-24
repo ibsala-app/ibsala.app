@@ -1,6 +1,6 @@
--- Testes da pós (0019): isolamento entre as duas fontes, troca de lote e a
--- regra de data. Banco novo, tudo dentro de uma transação que termina em
--- rollback.
+-- Testes da pós (0019, 0024): isolamento entre as duas fontes, troca de lote e
+-- a data que rotula sem esconder. Banco novo, tudo dentro de uma transação que
+-- termina em rollback.
 --
 -- O que estes testes protegem é o motivo de a pós ter tabela própria: a limpeza
 -- de uma captura não pode alcançar as linhas da outra. Em `mapa_dia` isso seria
@@ -113,7 +113,7 @@ values (current_date, 'GRADUAÇÃO - MANHÃ', '3 E.COMP', 'BD2', 'BANCO DE DADOS
         '07:30/09:20', 'Fulano', '105');
 
 -- ---------------------------------------------------------------------------
--- 3. a regra de data: planilha velha não vira tela
+-- 3. a data não esconde nada (0024): a tela rotula, o servidor manda tudo
 -- ---------------------------------------------------------------------------
 
 select public.substituir_lote_pos(
@@ -123,11 +123,12 @@ select public.substituir_lote_pos(
   '33333333-3333-3333-3333-333333333333');
 
 select testes.ok(
-  jsonb_array_length(public.estado_publico() -> 'pos') = 0,
-  'lote com data velha não aparece no estado público');
+  jsonb_array_length(public.estado_publico() -> 'pos') = 1,
+  'lote com data velha aparece no estado público');
 select testes.ok(
-  (select count(*) from public.mapa_pos) = 1,
-  'mas o lote continua guardado, porque é a prova do que a fonte dizia');
+  (public.estado_publico() -> 'pos' -> 0 ->> 'data_fonte')::date
+    = (now() at time zone 'America/Sao_Paulo')::date - 2,
+  'e leva a data da planilha, para a tela dizer de que dia ela é');
 
 select public.substituir_lote_pos(
   jsonb_build_array(jsonb_build_object('sala_raw','Remoto','curso','LLM',
@@ -137,7 +138,7 @@ select public.substituir_lote_pos(
 
 select testes.ok(
   jsonb_array_length(public.estado_publico() -> 'pos') = 1,
-  'lote de hoje aparece no estado público');
+  'lote de hoje substitui o velho no estado público');
 
 -- ---------------------------------------------------------------------------
 -- 4. a pós não mexe em sala livre
