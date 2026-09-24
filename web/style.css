@@ -1173,6 +1173,15 @@ body.bloqueado .rodape { display: none; }
     gap: 4px 16px;
   }
 
+  /* a grade de cima não tem a área `dias`, e o curso da pós mora nela: sem esta
+     regra o navegador cria colunas implícitas pro curso e espreme a disciplina
+     até sair uma sílaba por linha (visto no desktop em 24/09) */
+  .board li[data-origem="pos"] {
+    grid-template-areas:
+      "disc meta sala"
+      "dias dias sala";
+  }
+
   .ghost-li .g-meta { width: 92%; margin-top: 0; }
 
   .home-titulo { font-size: 38px; max-width: 26ch; text-wrap: balance; }
