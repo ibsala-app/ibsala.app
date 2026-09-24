@@ -372,6 +372,10 @@ main {
    chips de sala em cima e na borda do painel embaixo. Escopado no painel pra não
    mexer nos switches de Ajustes, que já têm o espaçamento das `.dica`. */
 .painel-cabeca .linha-switch { margin-top: 18px; }
+/* quatro opções não cabem numa linha de 390px: quebram em duas, cada botão
+   esticando pra fechar a linha, em vez de estourar a largura do painel */
+.painel-cabeca .filtro-livres { display: flex; flex-wrap: wrap; margin-top: 18px; }
+.filtro-livres button { flex: 1 1 auto; }
 .painel-cabeca #livres-turnos { padding-top: 6px; }
 
 /* "Enviar aviso de teste" é um botão solto entre dois cards de interruptor, e
@@ -1171,6 +1175,15 @@ body.bloqueado .rodape { display: none; }
       "acoes acoes acoes";
     align-items: center;
     gap: 4px 16px;
+  }
+
+  /* a grade de cima não tem a área `dias`, e o curso da pós mora nela: sem esta
+     regra o navegador cria colunas implícitas pro curso e espreme a disciplina
+     até sair uma sílaba por linha (visto no desktop em 24/09) */
+  .board li[data-origem="pos"] {
+    grid-template-areas:
+      "disc meta sala"
+      "dias dias sala";
   }
 
   .ghost-li .g-meta { width: 92%; margin-top: 0; }

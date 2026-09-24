@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=45'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=46'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -539,22 +539,76 @@ function chipsPorPredio(livres) {
 }
 
 // O app só sabia responder "agora", e quem procura onde estudar às 19h tinha que
-// esperar as 19h pra descobrir. O interruptor abre um bloco por turno que ainda
-// vem hoje, com a conta e as salas de cada um. Sai tudo de `mapaHoje` e `salas`,
-// que já estão na memória: nenhuma consulta nova.
-const DIA_TODO_CHAVE = 'ibsala:dia-todo'
+// esperar as 19h pra descobrir. O filtro troca a pergunta que o painel responde:
+// agora, no próximo turno, até o fim do dia (a sala que dá pra ocupar e não
+// sair mais) ou turno a turno. Sai tudo de `mapaHoje` e `salas`, que já estão na
+// memória: nenhuma consulta nova. O cabeçalho (`pill-livres`) continua dizendo
+// o agora, porque ele aparece em todas as telas.
+const FILTRO_CHAVE = 'ibsala:filtro-livres'
+const FILTROS = ['agora', 'proximo', 'fim', 'turnos']
+let filtroLivres = 'agora'
+try {
+  const f = localStorage.getItem(FILTRO_CHAVE)
+  // quem tinha ligado o antigo "Ver o resto do dia" continua vendo turno a turno
+  filtroLivres = FILTROS.includes(f) ? f
+    : localStorage.getItem('ibsala:dia-todo') === '1' ? 'turnos' : 'agora'
+} catch { /* privada */ }
+
+// fora de horário de aula o resto do dia começa no próximo turno; depois do
+// último, não há resto nenhum
+function turnosDaqui() {
+  const chaves = Object.keys(SLOTS)
+  const inicio = slotAtual() ?? proximoSlot(minutosAgora())?.k
+  return inicio ? chaves.slice(chaves.indexOf(inicio)) : []
+}
+
+// O que o número grande e a grade mostram, conforme o filtro. `livres` nulo é
+// "não há o que contar" (fora de horário, dia acabado), e aí `aviso` explica.
+function recorteLivres() {
+  const atual = slotAtual()
+  const daqui = turnosDaqui()
+  if (filtroLivres === 'proximo') {
+    const k = atual ? daqui[1] : daqui[0]
+    if (!k) return { livres: null, rotulo: 'sem próximo turno hoje', aviso: 'Não há próximo turno hoje.' }
+    return { livres: livresNoSlot(k), rotulo: `salas livres no ${SLOTS[k].label.toLowerCase()}` }
+  }
+  if (filtroLivres === 'fim') {
+    if (!daqui.length) {
+      return { livres: null, rotulo: 'as aulas de hoje acabaram', aviso: 'As aulas de hoje acabaram.' }
+    }
+    // livre até o fim é livre em TODOS os turnos que faltam: basta uma aula em
+    // qualquer um deles para a sala sair da lista
+    const ocupadas = new Set(mapaHoje
+      .filter((r) => r.sala_canon && daqui.some((k) => intervaloCobreSlot(r.horario, SLOTS[k])))
+      .map((r) => r.sala_canon))
+    return {
+      livres: salas.filter((x) => !ocupadas.has(x.sala)),
+      rotulo: daqui[0] === atual
+        ? 'salas livres de agora até o fim do dia'
+        : `salas livres do ${SLOTS[daqui[0]].label.toLowerCase()} até o fim do dia`,
+      semNada: 'Nenhuma sala fica livre até o fim do dia.',
+    }
+  }
+  if (!atual) return { livres: null, rotulo: 'fora do horário de aulas' }
+  return { livres: livresNoSlot(atual), rotulo: `salas livres no ${SLOTS[atual].label.toLowerCase()}` }
+}
+
+function pintarFiltro() {
+  for (const b of $('filtro-livres')?.children ?? []) {
+    const ativo = b.dataset.filtro === filtroLivres
+    b.classList.toggle('ativo', ativo)
+    b.setAttribute('aria-checked', String(ativo))
+  }
+}
+
 function pintarTurnos() {
   const box = $('livres-turnos')
-  const ligado = !!$('chk-dia-todo')?.checked
+  const ligado = filtroLivres === 'turnos'
   box.hidden = !ligado
   if (!ligado || !mapaCarregado) { box.replaceChildren(); return }
 
   const atual = slotAtual()
-  const chaves = Object.keys(SLOTS)
-  // fora de horário de aula o "resto do dia" começa no próximo turno; depois do
-  // último, não há resto nenhum e dizer isso é melhor que uma lista vazia
-  const inicio = atual ?? proximoSlot(minutosAgora())?.k
-  const daqui = inicio ? chaves.slice(chaves.indexOf(inicio)) : []
+  const daqui = turnosDaqui()
   if (!daqui.length) {
     const p = document.createElement('p')
     p.className = 'vazio'
@@ -588,19 +642,22 @@ function pintarAgora() {
   const min = minutosAgora()
 
   const livres = slot ? livresNoSlot(slot) : []
+  const recorte = recorteLivres()
 
   $('livres-num').classList.remove('ghost-num')
-  $('livres-num').textContent = slot ? livres.length : '–'
-  $('livres-rotulo').textContent = slot
-    ? `salas livres no ${SLOTS[slot].label.toLowerCase()}`
-    : 'fora do horário de aulas'
+  $('livres-num').textContent = recorte.livres ? recorte.livres.length : '–'
+  $('livres-rotulo').textContent = recorte.rotulo
   $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.length} salas`
   vulto('pill-livres', false)
   if (slot) gravarCasca({ livres: livres.length })
 
   const grade = $('livres-grade')
-  $('livres-vazio').hidden = !slot || livres.length > 0
-  grade.replaceChildren(...chipsPorPredio(livres))
+  const aviso = recorte.aviso ??
+    (recorte.livres && !recorte.livres.length ? recorte.semNada ?? 'Nenhuma sala livre neste turno.' : null)
+  $('livres-vazio').hidden = !aviso
+  if (aviso) $('livres-vazio').textContent = aviso
+  grade.replaceChildren(...chipsPorPredio(recorte.livres ?? []))
+  pintarFiltro()
   pintarTurnos()
 
   grade.removeAttribute('aria-busy')
@@ -679,11 +736,15 @@ function falhaNoMapa({ vazio = false } = {}) {
 }
 
 // escolha de tela, então mora no aparelho, igual ao tema
-try { $('chk-dia-todo').checked = localStorage.getItem(DIA_TODO_CHAVE) === '1' } catch { /* privada */ }
-on('chk-dia-todo', 'change', (e) => {
-  try { localStorage.setItem(DIA_TODO_CHAVE, e.target.checked ? '1' : '0') } catch { /* privada */ }
-  pintarTurnos()
-})
+for (const b of $('filtro-livres')?.children ?? []) {
+  b.addEventListener('click', () => {
+    filtroLivres = b.dataset.filtro
+    try { localStorage.setItem(FILTRO_CHAVE, filtroLivres) } catch { /* privada */ }
+    if (mapaCarregado) pintarAgora()
+    else pintarFiltro()
+  })
+}
+pintarFiltro()
 
 on('btn-retry', 'click', (e) =>
   ocupado(e.currentTarget, () => (pronto = carregarAgora({ ghost: true }))))
@@ -836,13 +897,25 @@ async function buscar(termo, tela) {
 // está ocupada. Por isso `livresNoSlot` continua olhando só o `mapaHoje`: nada
 // daqui tira sala da lista de livres.
 //
-// O bloco só aparece quando existe linha do DIA DE HOJE. Planilha parada em
-// outra data não vira tela: quem decide isso é o servidor, que só manda o lote
-// com `data_fonte` igual a hoje.
+// Desde 24/09 o bloco mostra TUDO o que a planilha tem, qualquer que seja a data
+// escrita nela (migration 0024). Esconder planilha de outro dia deixava o aluno
+// sem saber se a pós não tinha aula ou se a fonte estava parada; agora a data
+// vai no título quando não é a de hoje, e cada um decide o que fazer com ela.
+function dataPos(r) {
+  const d = r?.data_fonte
+  if (!d || d === hojeISO()) return null
+  const [, mes, dia] = String(d).split('-')
+  return dia && mes ? `${dia}/${mes}` : null
+}
+
 function pintarPos() {
   const bloco = $('bloco-pos')
   if (!bloco) return
   bloco.hidden = !posHoje.length
+  const velha = dataPos(posHoje[0])
+  $('pos-titulo').textContent = velha
+    ? `Pós-graduação · planilha de ${velha}`
+    : 'Pós-graduação hoje'
   $('board-pos').replaceChildren(...posHoje.map(cardPos))
 }
 
@@ -853,7 +926,7 @@ function cardPos(r) {
     <span class="disc"><span class="tag-pos">PÓS</span>${esc(r.disciplina || 'Aula da pós')}</span>
     <span class="sala">${esc(r.sala || (r.modalidade === 'remoto' ? 'Remoto' : '—'))}</span>
     <span class="meta">${esc(nomeCurto(r.professor))}</span>
-    <span class="curso">${esc(r.curso || 'Pós-graduação')}</span>`)
+    <span class="curso">${esc(r.curso || 'Pós-graduação')}${dataPos(r) ? ` · planilha de ${dataPos(r)}` : ''}</span>`)
   el.dataset.origem = 'pos'
   metaEnxuta(el, [r.curso, r.professor, r.sala].filter(Boolean).join(' · '))
   return el
