@@ -33,6 +33,8 @@ PARES = [
     ('btn-menu', 'text', 'surface', 4.5),
     ('btn-menu.primario', 'sobre-ouro', 'gold', 4.5),
     ('btn-menu.menor', 'text-dim', 'bg', 4.5),
+    ('btn-planilha (Google Planilhas)', 'sobre-sheets', 'sheets', 4.5),
+    ('btn-planilha pressionado', 'sobre-sheets', 'sheets-press', 4.5),
     ('botao-raso', 'text-dim', 'surface', 4.5),
     ('botao-primario', 'sobre-ouro', 'gold', 4.5),
     ('eyebrow', 'gold-texto', 'bg', 4.5),

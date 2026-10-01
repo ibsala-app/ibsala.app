@@ -60,6 +60,11 @@
   --text-muted: #62708c;
   --sobre-ouro: #241a00;      /* texto que fica em cima do ouro, nos dois temas */
   --sobre-azul: #ffffff;      /* texto que fica em cima do azul da pill */
+  /* verde do Google Planilhas: o #0F9D58 do logo dá 3,4:1 com branco, então o
+     fundo é o verde escuro da própria interface do Sheets */
+  --sheets: #188038;
+  --sheets-press: #137333;
+  --sobre-sheets: #ffffff;
   /* ouro como COR DE TEXTO em fundo claro: o #d89700 dava 2,40:1 no eyebrow,
      que é 12,5px e portanto texto normal pra WCAG */
   --gold-texto: #8a6100;
@@ -794,6 +799,17 @@ select.mini { padding-right: 8px; }
 /* link com cara de botão: sem o display o `a` fica inline e o padding vaza */
 a.btn-menu { display: block; text-decoration: none; }
 
+/* cara do Google Planilhas, igual nos dois temas: quem toca aqui sai do app */
+.btn-menu.btn-planilha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--sobre-sheets);
+  background: var(--sheets);
+  border-color: transparent;
+}
+.btn-planilha .ico-sheets { flex: none; width: 20px; height: 26px; }
+
 /* dentro da grade 2x2 o stretch esticava este botão à altura do vizinho e ele
    virava uma CAIXA VAZIA com borda ao lado de três cards sólidos */
 .btn-menu.menor {
@@ -835,6 +851,7 @@ button:disabled {
   }
   .btn-menu.primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--gold); }
   .btn-menu.menor:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+  .btn-menu.btn-planilha:hover { filter: brightness(1.08); background: var(--sheets); border-color: transparent; }
   .botao-primario:hover:not(:disabled) { filter: brightness(1.06); }
   .botao-raso:hover:not(:disabled) { background: var(--hover); border-color: var(--blue-2); }
   .mini:hover:not(:disabled) { background: var(--hover); border-color: var(--blue-2); }
@@ -855,6 +872,7 @@ button:disabled {
   background: var(--gold-dim);
   filter: none;
 }
+.btn-menu.btn-planilha:active { background: var(--sheets-press); filter: none; }
 .voltar:active { transform: translateY(1px); }
 
 @media (prefers-reduced-motion: reduce) {

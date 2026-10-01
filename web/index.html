@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=49">
+  <link rel="stylesheet" href="style.css?v=50">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -108,8 +108,14 @@
         <button id="btn-menu-criar" class="btn-menu menor" data-vai="conta" data-intencao="criar">Criar conta</button>
         <!-- a fonte crua, pra quem quer conferir o que o app mostra -->
         <a class="btn-menu btn-planilha" target="_blank" rel="noopener"
-           href="https://docs.google.com/spreadsheets/d/1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y/edit">Planilha oficial do Ibmec
-          <span class="btn-sub">(abre no Google Planilhas) ↗</span></a>
+           href="https://docs.google.com/spreadsheets/d/1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y/edit">
+          <svg class="ico-sheets" viewBox="0 0 20 26" aria-hidden="true">
+            <path d="M2 0h11l7 7v17a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z" fill="#fff"/>
+            <path d="M13 0l7 7h-5a2 2 0 0 1-2-2z" fill="#b7e1cd"/>
+            <path d="M4 11h12v10H4zm1.6 1.6v2.6h3.6v-2.6zm5.2 0v2.6h3.6v-2.6zm-5.2 4.2v2.6h3.6v-2.6zm5.2 0v2.6h3.6v-2.6z" fill="#188038" fill-rule="evenodd"/>
+          </svg>
+          <span>Planilha oficial do Ibmec
+            <span class="btn-sub">(abre no Google Planilhas) ↗</span></span></a>
       </nav>
 
       <p class="rodape-links">
@@ -462,6 +468,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=49"></script>
+  <script type="module" src="app.js?v=50"></script>
 </body>
 </html>
