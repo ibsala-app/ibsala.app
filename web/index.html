@@ -44,7 +44,7 @@
        app.js de antes do #22 encontrou o index.html de depois e morreu em
        `$('btn-push')`. O numero acompanha o CACHE do sw.js, e scripts/versao.py
        reprova no CI se os quatro arquivos sairem de sincronia. -->
-  <link rel="stylesheet" href="style.css?v=48">
+  <link rel="stylesheet" href="style.css?v=49">
   <script defer src="https://js.sentry-cdn.com/3883535ebfb84453e132d81009942779.min.js" crossorigin="anonymous"></script>
   <!-- supabase-js self-hospedado (2.112.3). Vinha do cdn.jsdelivr.net, e rede que
        bloqueia o CDN matava o app.js na primeira linha que usa window.supabase:
@@ -106,6 +106,10 @@
         <button class="btn-menu" data-vai="agora">Faculdade agora</button>
         <button id="btn-menu-entrar" class="btn-menu" data-vai="conta" data-intencao="entrar">Entrar</button>
         <button id="btn-menu-criar" class="btn-menu menor" data-vai="conta" data-intencao="criar">Criar conta</button>
+        <!-- a fonte crua, pra quem quer conferir o que o app mostra -->
+        <a class="btn-menu btn-planilha" target="_blank" rel="noopener"
+           href="https://docs.google.com/spreadsheets/d/1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y/edit">Planilha oficial do Ibmec
+          <span class="btn-sub">(abre no Google Planilhas) ↗</span></a>
       </nav>
 
       <p class="rodape-links">
@@ -458,6 +462,6 @@
   </noscript>
 
   <div id="toast" role="status"></div>
-  <script type="module" src="app.js?v=48"></script>
+  <script type="module" src="app.js?v=49"></script>
 </body>
 </html>

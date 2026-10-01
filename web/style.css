@@ -791,6 +791,9 @@ select.mini { padding-right: 8px; }
   border-color: transparent;
 }
 
+/* link com cara de botão: sem o display o `a` fica inline e o padding vaza */
+a.btn-menu { display: block; text-decoration: none; }
+
 /* dentro da grade 2x2 o stretch esticava este botão à altura do vizinho e ele
    virava uma CAIXA VAZIA com borda ao lado de três cards sólidos */
 .btn-menu.menor {
@@ -1140,6 +1143,8 @@ body.bloqueado .rodape { display: none; }
     grid-template-columns: 1fr 1fr;
     gap: 14px;
   }
+  /* quinto item: na grade ele ficaria sozinho numa meia linha */
+  .menu .btn-planilha { grid-column: 1 / -1; }
 
   .home-titulo { font-size: 32px; }
   .tela-titulo { font-size: 30px; }
