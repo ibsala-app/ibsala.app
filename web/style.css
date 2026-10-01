@@ -543,9 +543,9 @@ main {
 /* sala dedicada a curso: o selo e a ficha de livre trocam o ouro pelo matiz do
    curso. Sala sem curso não tem `data-curso` e fica como sempre foi. */
 .board .sala[data-curso="tech"], .sala-chip[data-curso="tech"] { color: var(--curso-tech); background: var(--curso-tech-suave); }
-.board .sala[data-curso="arq"], .sala-chip[data-curso="arq"] { color: var(--curso-arq); background: var(--curso-arq-suave); }
-.board .sala[data-curso="eco"], .sala-chip[data-curso="eco"] { color: var(--curso-eco); background: var(--curso-eco-suave); }
-.board .sala[data-curso="dir"], .sala-chip[data-curso="dir"] { color: var(--curso-dir); background: var(--curso-dir-suave); }
+.board .sala[data-curso="arquitetura"], .sala-chip[data-curso="arquitetura"] { color: var(--curso-arq); background: var(--curso-arq-suave); }
+.board .sala[data-curso="economia"], .sala-chip[data-curso="economia"] { color: var(--curso-eco); background: var(--curso-eco-suave); }
+.board .sala[data-curso="direito"], .sala-chip[data-curso="direito"] { color: var(--curso-dir); background: var(--curso-dir-suave); }
 .sala-chip[data-curso] { border-color: currentColor; }
 
 /* o dia da semana em "Minhas matérias" usava o chip DOURADO de sala. O ouro é o

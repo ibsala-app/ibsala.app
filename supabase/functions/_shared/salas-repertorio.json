@@ -1,27 +1,31 @@
 {
-  "_doc": "Repertorio fixo de salas do Ibmec BH. Fonte unica de verdade, revisada sala a sala em 2026-08-06. Copia identica vive em app-salas/ (v1). O scraper NAO escreve aqui: grafia desconhecida vai pra quarentena.",
-  "versao": "2026-08-12",
+  "_doc": "Repertorio fixo de salas do Ibmec BH. Fonte unica de verdade, revisada sala a sala em 2026-08-06. Copia identica vive em app-salas/ (v1). O scraper NAO escreve aqui: grafia desconhecida vai pra quarentena. Em 2026-10-01 o Josh fotografou a placa de cada porta (83 salas): a canonica passou a ser o NUMERO da porta, e os codigos da planilha (2A1, 2L2, 3L1, HUBS...) viraram apelido. Atributos (andar, codinome, formato, curso, modalidade) moram na tabela salas, migration 0025.",
+  "versao": "2026-10-01",
   "chave": "casamento por strip + colapso de espacos internos + upper + remocao de acento (NFD) + remocao de pontuacao ( ) - . — a BARRA sobrevive, porque regra_barra depende dela. Pontuacao entrou em 12/08/2026: a planilha trocou '103 - DESIGN THINKING' por '103 (DESIGN THINKING)', a grafia caiu na quarentena e a 103 apareceu livre com evento dentro. Efeito colateral bom: variante nova da mesma sala nao precisa mais de apelido novo. O load da captura MORRE se dois rotulos colapsarem na mesma chave apontando pra salas diferentes.",
   "regra_barra": "grafia com '/' desconhecida: resolver cada lado contra canonicas e apelidos. UM lado resolve -> ocupa esse lado (visto em 12/08: '207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)' deixava a P2-206 livre com aula dentro). DOIS OU MAIS lados resolvem ('302/303') -> nao ocupa nada, comportamento de 06/08 mantido, mas o caso e logado pra decidir com volume medido; ocupar as duas exige coluna mapa_dia.salas_canon. NENHUM lado resolve -> ignorada. Apelido cadastrado continua ganhando da regra, porque existe rotulo com barra que nao e par ('114 LAB QUIMICA/FISICA').",
 
   "salas": {
     "101": "P1", "102": "P1", "103": "P1", "104": "P1", "105": "P1",
     "106": "P1", "107": "P1", "108": "P1", "109": "P1", "110": "P1",
-    "111": "P1", "112": "P1", "113": "P1", "114": "P1",
+    "111": "P1", "112": "P1", "113": "P1", "114": "P1", "115": "P1",
+    "116": "P1", "117": "P1", "118": "P1", "119": "P1",
 
     "201": "P1", "202": "P1", "203": "P1", "204": "P1", "205": "P1",
     "206": "P1", "207": "P1", "208": "P1", "209": "P1", "210": "P1",
-    "211": "P1", "212": "P1", "213": "P1",
-    "2A1": "P1", "2A2": "P1", "2A3": "P1", "2L1": "P1", "2L2": "P1",
+    "211": "P1", "212": "P1", "213": "P1", "214": "P1", "215": "P1",
+    "216": "P1", "217": "P1", "218": "P1", "219": "P1", "220": "P1",
+    "221": "P1", "222": "P1", "223": "P1", "224": "P1",
 
     "301": "P1", "302": "P1", "303": "P1", "304": "P1", "305": "P1",
     "306": "P1", "307": "P1", "308": "P1", "309": "P1", "310": "P1",
-    "311": "P1", "312": "P1", "313": "P1", "314": "P1",
-    "3L1": "P1", "3L2": "P1",
+    "311": "P1", "312": "P1", "313": "P1", "314": "P1", "315": "P1",
+    "317": "P1", "318": "P1", "319": "P1", "320": "P1", "321": "P1",
+    "322": "P1", "323": "P1", "324": "P1",
 
-    "P2-102": "P2", "P2-103": "P2", "P2-106": "P2", "P2-107": "P2",
-    "P2-108": "P2", "P2-109": "P2", "P2-202": "P2", "P2-203": "P2",
-    "P2-204": "P2", "P2-206": "P2", "P2-HUBS": "P2"
+    "P2-101": "P2", "P2-102": "P2", "P2-103": "P2", "P2-104": "P2", "P2-105": "P2",
+    "P2-106": "P2", "P2-107": "P2", "P2-108": "P2", "P2-109": "P2", "P2-201": "P2",
+    "P2-202": "P2", "P2-203": "P2", "P2-204": "P2", "P2-205": "P2", "P2-206": "P2",
+    "P2-207": "P2", "P2-208": "P2"
   },
 
   "apelidos": {
@@ -50,7 +54,22 @@
     "202 (P2) LAB.REDES": "P2-202",
     "203 (P2)": "P2-203",
     "206 (P2)": "P2-206",
-    "HUBS": "P2-HUBS"
+    "HUBS": "P2-205",
+
+    "1L1": "102",
+    "2A1": "216", "2A2": "215", "2A3": "214",
+    "2L1": "217", "2L2": "207",
+    "3L1": "315", "3L2": "307",
+
+    "101 (P2)": "P2-101",
+    "104 (P2)": "P2-104",
+    "105 (P2)": "P2-105",
+    "201 (P2)": "P2-201",
+    "204 (P2)": "P2-204",
+    "205 (P2)": "P2-205",
+    "207 (P2)": "P2-207",
+    "207 (P2) LAB.PROJETOS ELETRICOS": "P2-207",
+    "208 (P2)": "P2-208"
   },
 
   "ignoradas": [

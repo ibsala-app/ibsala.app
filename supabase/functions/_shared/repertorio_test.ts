@@ -35,9 +35,17 @@ Deno.test('pseudo-sala não ocupa nada', () => {
 })
 
 Deno.test('barra desconhecida: um lado resolve, ocupa esse lado', () => {
-  assertEquals(
-    resolverSala('207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)', rep)[1],
-    'apelido-barra')
+  // typo da origem: só o 304 é sala
+  assertEquals(resolverSala('304/035', rep), ['304', 'apelido-barra'])
+})
+
+Deno.test('código da planilha vira o número da porta (placas de 01/10)', () => {
+  assertEquals(resolverSala('2L2', rep), ['207', 'apelido'])
+  assertEquals(resolverSala('3L1', rep), ['315', 'apelido'])
+  assertEquals(resolverSala('HUBS', rep), ['P2-205', 'apelido'])
+  // a P2-207 passou a existir, então o rótulo de 12/08 vira par de salas
+  assertEquals(resolverSala('207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)', rep),
+    [null, 'barra-multipla'])
 })
 
 Deno.test('barra com dois lados conhecidos fica em quarentena', () => {
