@@ -74,7 +74,16 @@ def rep():
 
 def test_canonica_passa_direto(rep):
     assert resolver_sala("302", rep) == ("302", "canonica")
-    assert resolver_sala("  2l1 ", rep) == ("2L1", "canonica")
+    assert resolver_sala("  p2-205 ", rep) == ("P2-205", "canonica")
+
+
+def test_codigo_da_planilha_vira_numero_da_porta(rep):
+    # 01/10/2026: a placa da 207 diz "Lab. 2L2", e a lista de livres mostrava
+    # "207" e "2L2" lado a lado como se fossem duas salas
+    assert resolver_sala("  2l1 ", rep) == ("217", "apelido")
+    assert resolver_sala("2L2", rep) == ("207", "apelido")
+    assert resolver_sala("2A1", rep) == ("216", "apelido")
+    assert resolver_sala("3L1", rep) == ("315", "apelido")
 
 
 def test_apelido_vira_canonica(rep):
@@ -94,7 +103,7 @@ def test_apelido_do_p2_tolera_grafia(rep):
               "LAB. HIDRAULICA  -  108 (P2)"):
         assert resolver_sala(g, rep)[0] == "P2-108"
     assert resolver_sala("103 (P2) NPJ", rep)[0] == "P2-103"
-    assert resolver_sala("HUBS", rep)[0] == "P2-HUBS"
+    assert resolver_sala("HUBS", rep)[0] == "P2-205"
     # quarentena de 07/08: rótulo curto do maker e o lab de maquetes, que é
     # sala nova (não aparecia em quatro meses de captura)
     assert resolver_sala("109 (P2) MAKER", rep)[0] == "P2-109"
@@ -130,15 +139,16 @@ def test_concatenada_com_dois_lados_validos_nao_ocupa_mas_e_logada(rep):
     linhas = [{"sala": "302/303"}, {"sala": "2L1/2L2"}]
     pendentes, multiplas = anotar_canonicas(linhas, rep)
     assert pendentes == {}
-    assert multiplas == {"302/303": ["302", "303"], "2L1/2L2": ["2L1", "2L2"]}
+    assert multiplas == {"302/303": ["302", "303"], "2L1/2L2": ["217", "207"]}
 
 
 def test_barra_com_um_lado_valido_ocupa_esse_lado(rep):
-    # visto em 12/08: o lado esquerdo não existe no repertório e o direito é
+    # visto em 12/08: o lado esquerdo não existia no repertório e o direito era
     # apelido cadastrado. Descartar o rótulo inteiro deixava a P2-206 livre com
-    # Arquitetura de Computadores dentro
+    # Arquitetura de Computadores dentro. Desde 01/10 a P2-207 existe (a placa
+    # foi fotografada), então os dois lados resolvem e o par ocupa as duas
     assert resolver_sala("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)", rep) == \
-        ("P2-206", "apelido-barra")
+        (None, "barra-multipla")
     # typo da origem em que só um lado é sala: ocupa o lado que existe
     assert resolver_sala("304/035", rep) == ("304", "apelido-barra")
     # e barra sem lado nenhum válido continua não ocupando
@@ -176,7 +186,8 @@ def test_repertorio_integro(rep):
     # apelido órfão apontaria pra sala inexistente e sumiria da conta
     assert all(c in rep["predio"] for c in rep["apelidos"].values())
     assert not set(rep["apelidos"]) & set(rep["salas"])
-    assert len(rep["predio"]) == 59
+    # 83 portas fotografadas em 01/10/2026 (a 316 ainda falta)
+    assert len(rep["predio"]) == 83
 
 
 def test_repertorio_ambiguo_morre_no_load(tmp_path):

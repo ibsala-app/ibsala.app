@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=51'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=52'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -397,7 +397,9 @@ async function estadoPublico() {
   const [mapa, inv, conf, quantos] = await Promise.all([
     sb.from('mapa_dia').select('turma,codigo,disciplina,horario,professor,sala,sala_canon')
       .eq('data', hojeISO()),
-    sb.from('salas').select('sala,predio').eq('ativa', true).order('sala'),
+    // `*` e não a lista de colunas: antes da 0025 `modalidade` não existe e
+    // pedir por nome derrubaria a tela inteira
+    sb.from('salas').select('*').eq('ativa', true).order('sala'),
     sb.from('config').select('key,value'),
     sb.rpc('total_alunos'),
   ])
@@ -515,23 +517,35 @@ function pintarRelogio() {
 const chaveSala = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[().\-]/g, ' ').replace(/\s+/g, ' ').trim()
 
-// Salas dedicadas a um curso ganham cor própria (levantamento das placas de
-// 01/10/2026). A chave passa por `chaveSala`, então "P2-202", "202 (P2)" e
-// "p2 202" caem no mesmo lugar. O `title` diz o curso em texto, porque cor
-// sozinha não chega em leitor de tela nem em quem não distingue as cores.
-const CURSOS = { tech: 'Tech', arq: 'Arquitetura', eco: 'Economia', dir: 'Direito' }
-const CURSO_DA_SALA = new Map(Object.entries({
-  tech: ['108', '308', 'P2-202', 'P2-203'],
-  arq: ['113', '115', '204', 'P2-101', 'P2-204'],
-  eco: ['105'],
-  dir: ['P2-103', 'P2-104'],
-}).flatMap(([curso, salas]) => salas.map((s) => [chaveSala(s), curso])))
-const cursoDaSala = (nome) => CURSO_DA_SALA.get(chaveSala(nome)) || null
+// Atributos de sala vêm do banco (migration 0025, levantamento das placas de
+// 01/10/2026). Sala dedicada a um curso ganha cor própria, e o `title` diz o
+// curso e o codinome em texto, porque cor sozinha não chega em leitor de tela
+// nem em quem não distingue as cores. A busca passa por `chaveSala`, então
+// "P2-202", "202 (P2)" e "p2 202" caem na mesma sala.
+const CURSOS = { tech: 'Tech', arquitetura: 'Arquitetura', economia: 'Economia', direito: 'Direito' }
+const salaPorNome = (nome) => {
+  const k = chaveSala(nome)
+  return salas.find((x) => chaveSala(x.sala) === k) ?? null
+}
+const cursoDaSala = (nome) => salaPorNome(nome)?.curso ?? null
+function rotuloSala(nome) {
+  const s = salaPorNome(nome)
+  return [s?.codinome, s?.curso && `Sala de ${CURSOS[s.curso]}`].filter(Boolean).join(' · ')
+}
 // atributos prontos pra entrar no template do cartão
 function attrCurso(nome) {
   const c = cursoDaSala(nome)
-  return c ? ` data-curso="${c}" title="Sala de ${CURSOS[c]}"` : ''
+  const t = rotuloSala(nome)
+  return (c ? ` data-curso="${c}"` : '') + (t ? ` title="${esc(t)}"` : '')
 }
+
+// O que entra na lista de livres: sala de aula e sala de estudo. `so_aula` é
+// laboratório que recebe aula mas não fica aberto, `fechada` é secretaria, área
+// técnica e afins. Sala de estudo nunca recebe aula, então a ocupação nem
+// conta. Sem `modalidade` (RPC de antes da 0025) tudo entra, como era.
+const naLista = (x) => !x.modalidade || x.modalidade === 'aula' || x.modalidade === 'estudo'
+const livresFora = (ocupadas) => salas.filter((x) =>
+  naLista(x) && (x.modalidade === 'estudo' || !ocupadas.has(x.sala)))
 
 // Salas que uma linha do mapa ocupa. A captura resolve UMA canônica por linha e
 // deixa `sala_canon` nulo quando o rótulo junta duas salas de verdade
@@ -560,7 +574,7 @@ function livresNoSlot(chave) {
   const ocupadas = new Set(mapaHoje
     .filter((r) => intervaloCobreSlot(r.horario, s))
     .flatMap(salasDaLinha))
-  return salas.filter((x) => !ocupadas.has(x.sala))
+  return livresFora(ocupadas)
 }
 
 // chips agrupados por prédio, e TODOS: cortar em 40 sem avisar escondia sala
@@ -574,11 +588,9 @@ function chipsPorPredio(livres) {
       const c = document.createElement('span')
       c.className = 'sala-chip'
       c.textContent = s.sala
-      const curso = cursoDaSala(s.sala)
-      if (curso) {
-        c.dataset.curso = curso
-        c.title = `Sala de ${CURSOS[curso]}`
-      }
+      if (s.curso) c.dataset.curso = s.curso
+      const t = rotuloSala(s.sala)
+      if (t) c.title = t
       return c
     })
     return [rot, ...chips]
@@ -629,7 +641,7 @@ function recorteLivres() {
       .filter((r) => daqui.some((k) => intervaloCobreSlot(r.horario, SLOTS[k])))
       .flatMap(salasDaLinha))
     return {
-      livres: salas.filter((x) => !ocupadas.has(x.sala)),
+      livres: livresFora(ocupadas),
       rotulo: daqui[0] === atual
         ? 'salas livres de agora até o fim do dia'
         : `salas livres do ${SLOTS[daqui[0]].label.toLowerCase()} até o fim do dia`,
@@ -694,7 +706,7 @@ function pintarAgora() {
   $('livres-num').classList.remove('ghost-num')
   $('livres-num').textContent = recorte.livres ? recorte.livres.length : '–'
   $('livres-rotulo').textContent = recorte.rotulo
-  $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.length} salas`
+  $('pill-livres').textContent = slot ? `${livres.length} livres` : `${salas.filter(naLista).length} salas`
   vulto('pill-livres', false)
   if (slot) gravarCasca({ livres: livres.length })
 
