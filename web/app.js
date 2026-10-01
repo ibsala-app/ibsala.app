@@ -480,6 +480,24 @@ const POLL_JITTER = 30 * 1000
 let pollAtraso = POLL_BASE
 let pollTimer
 
+// Na virada de horário a captura roda a cada 2 minutos (migration 0026), e
+// esperar 5 aqui jogava fora a maior parte disso: é a hora em que professor
+// troca de sala e o aluno está com o app aberto procurando onde ir. Fora da
+// janela o ritmo segue o de 5 minutos. Busca sem mudança custa pouco, porque a
+// `estado_publico` responde só `mudou: false`. Lista igual à da 0026.
+const VIRADAS = ['07:30', '09:20', '09:50', '11:40', '13:30', '15:20', '15:50',
+  '17:40', '18:40', '22:30'].map((h) => {
+  const [hh, mm] = h.split(':').map(Number)
+  return hh * 60 + mm
+})
+const POLL_VIRADA = 2 * 60 * 1000
+const naVirada = () => {
+  const dia = agoraBRT().getDay()
+  if (dia < 1 || dia > 5) return false
+  const m = minutosAgora()
+  return VIRADAS.some((v) => Math.abs(m - v) <= 10)
+}
+
 function agendarPoll(ms = pollAtraso) {
   clearTimeout(pollTimer)
   pollTimer = setTimeout(async () => {
@@ -489,7 +507,7 @@ function agendarPoll(ms = pollAtraso) {
     const ok = await carregarAgora()
     pollAtraso = ok ? POLL_BASE : Math.min(pollAtraso * 2, POLL_TETO)
     agendarPoll()
-  }, ms + Math.random() * POLL_JITTER)
+  }, (ms === POLL_BASE && naVirada() ? POLL_VIRADA : ms) + Math.random() * POLL_JITTER)
 }
 
 // Data, turno e contagem pro próximo slot saem do RELÓGIO, não do servidor.
