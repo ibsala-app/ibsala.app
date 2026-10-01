@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=47'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=48'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -936,10 +936,15 @@ function pintarPos() {
   const bloco = $('bloco-pos')
   if (!bloco) return
   bloco.hidden = !posHoje.length
+  // IBSALA-R (30/09): index.html de antes do #79, sem o `pos-titulo`, rodando
+  // este app.js. O título é enfeite; o quadro da pós não pode morrer por ele.
+  const titulo = $('pos-titulo')
   const velha = dataPos(posHoje[0])
-  $('pos-titulo').textContent = velha
-    ? `Pós-graduação · planilha de ${velha}`
-    : 'Pós-graduação hoje'
+  if (titulo) {
+    titulo.textContent = velha
+      ? `Pós-graduação · planilha de ${velha}`
+      : 'Pós-graduação hoje'
+  }
   $('board-pos').replaceChildren(...posHoje.map(cardPos))
 }
 
