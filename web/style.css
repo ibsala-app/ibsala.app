@@ -65,6 +65,16 @@
   --sheets: #188038;
   --sheets-press: #137333;
   --sobre-sheets: #ffffff;
+  /* salas dedicadas a um curso: texto escuro em fundo bem claro, um matiz por
+     curso. Vermelho fica de fora porque já é da pós e de erro. */
+  --curso-tech: #5b21b6;
+  --curso-tech-suave: #f1ecff;
+  --curso-arq: #9a3412;
+  --curso-arq-suave: #fff0e6;
+  --curso-eco: #166534;
+  --curso-eco-suave: #e9f7ee;
+  --curso-dir: #0e5a63;
+  --curso-dir-suave: #e4f4f6;
   /* ouro como COR DE TEXTO em fundo claro: o #d89700 dava 2,40:1 no eyebrow,
      que é 12,5px e portanto texto normal pra WCAG */
   --gold-texto: #8a6100;
@@ -129,6 +139,14 @@
     --pos-suave: #241412;
     --pos-borda: #5c2a24;
     --pos-texto: #ffb4a8;
+    --curso-tech: #cbb8ff;
+    --curso-tech-suave: #1f1733;
+    --curso-arq: #ffb68c;
+    --curso-arq-suave: #2b180d;
+    --curso-eco: #8fdca8;
+    --curso-eco-suave: #0f241a;
+    --curso-dir: #8ad6df;
+    --curso-dir-suave: #0c2427;
     --text: #e8edf8;
     --text-dim: #a8b4d0;
     --text-muted: #8896c0; /* sólido; nunca opacity em texto */
@@ -167,6 +185,14 @@
     --pos-suave: #241412;
     --pos-borda: #5c2a24;
     --pos-texto: #ffb4a8;
+    --curso-tech: #cbb8ff;
+    --curso-tech-suave: #1f1733;
+    --curso-arq: #ffb68c;
+    --curso-arq-suave: #2b180d;
+    --curso-eco: #8fdca8;
+    --curso-eco-suave: #0f241a;
+    --curso-dir: #8ad6df;
+    --curso-dir-suave: #0c2427;
     --text: #e8edf8;
     --text-dim: #a8b4d0;
     --text-muted: #8896c0; /* sólido; nunca opacity em texto */
@@ -513,6 +539,14 @@ main {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* sala dedicada a curso: o selo e a ficha de livre trocam o ouro pelo matiz do
+   curso. Sala sem curso não tem `data-curso` e fica como sempre foi. */
+.board .sala[data-curso="tech"], .sala-chip[data-curso="tech"] { color: var(--curso-tech); background: var(--curso-tech-suave); }
+.board .sala[data-curso="arq"], .sala-chip[data-curso="arq"] { color: var(--curso-arq); background: var(--curso-arq-suave); }
+.board .sala[data-curso="eco"], .sala-chip[data-curso="eco"] { color: var(--curso-eco); background: var(--curso-eco-suave); }
+.board .sala[data-curso="dir"], .sala-chip[data-curso="dir"] { color: var(--curso-dir); background: var(--curso-dir-suave); }
+.sala-chip[data-curso] { border-color: currentColor; }
 
 /* o dia da semana em "Minhas matérias" usava o chip DOURADO de sala. O ouro é o
    sinal mais forte do app e é do número da porta; dia da semana é etiqueta. */

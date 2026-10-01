@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=50'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=51'
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -515,6 +515,24 @@ function pintarRelogio() {
 const chaveSala = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[().\-]/g, ' ').replace(/\s+/g, ' ').trim()
 
+// Salas dedicadas a um curso ganham cor própria (levantamento das placas de
+// 01/10/2026). A chave passa por `chaveSala`, então "P2-202", "202 (P2)" e
+// "p2 202" caem no mesmo lugar. O `title` diz o curso em texto, porque cor
+// sozinha não chega em leitor de tela nem em quem não distingue as cores.
+const CURSOS = { tech: 'Tech', arq: 'Arquitetura', eco: 'Economia', dir: 'Direito' }
+const CURSO_DA_SALA = new Map(Object.entries({
+  tech: ['108', '308', 'P2-202', 'P2-203'],
+  arq: ['113', '115', '204', 'P2-101', 'P2-204'],
+  eco: ['105'],
+  dir: ['P2-103', 'P2-104'],
+}).flatMap(([curso, salas]) => salas.map((s) => [chaveSala(s), curso])))
+const cursoDaSala = (nome) => CURSO_DA_SALA.get(chaveSala(nome)) || null
+// atributos prontos pra entrar no template do cartão
+function attrCurso(nome) {
+  const c = cursoDaSala(nome)
+  return c ? ` data-curso="${c}" title="Sala de ${CURSOS[c]}"` : ''
+}
+
 // Salas que uma linha do mapa ocupa. A captura resolve UMA canônica por linha e
 // deixa `sala_canon` nulo quando o rótulo junta duas salas de verdade
 // ("302/303", motivo `barra-multipla`). Em 24/09 eram 43 aulas assim, e nenhuma
@@ -556,6 +574,11 @@ function chipsPorPredio(livres) {
       const c = document.createElement('span')
       c.className = 'sala-chip'
       c.textContent = s.sala
+      const curso = cursoDaSala(s.sala)
+      if (curso) {
+        c.dataset.curso = curso
+        c.title = `Sala de ${CURSOS[curso]}`
+      }
       return c
     })
     return [rot, ...chips]
@@ -699,7 +722,7 @@ function pintarAgora() {
   rolando.sort(porHorario)
   $('board-agora').replaceChildren(...rolando.map((r) => li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala">${esc(chipSala(r))}</span>
+    <span class="sala"${attrCurso(chipSala(r))}>${esc(chipSala(r))}</span>
     <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
   pintarPos()
@@ -1003,7 +1026,7 @@ function metaEnxuta(el, completa) {
 function cardAula(r, { adicionar } = {}) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala">${esc(chipSala(r))}</span>
+    <span class="sala"${attrCurso(chipSala(r))}>${esc(chipSala(r))}</span>
     <span class="meta">${esc(r.horario)} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
   metaEnxuta(el, `hoje · ${r.horario} · ${r.turma} · ${r.professor}`)
   if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r))
@@ -1948,7 +1971,7 @@ function pintarHoje() {
   board.replaceChildren(...linhasHoje.map(({ m, aula }) => (aula
     ? li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala">${esc(chipSala(aula))}</span>
+      <span class="sala"${attrCurso(chipSala(aula))}>${esc(chipSala(aula))}</span>
       <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}</span>`)
     : li(`
       <span class="disc">${esc(m.disciplina)}</span>
