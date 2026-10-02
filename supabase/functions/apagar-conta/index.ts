@@ -4,6 +4,7 @@
 // (a autenticação é feita aqui dentro via getUser; CORS liberado pro app)
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { reportar, servir } from '../_shared/sentry.ts'
 
 // Origem fixa: é a única function com CORS, e ela apaga conta. Com `*`,
 // qualquer página que tivesse conseguido um token do aluno podia gastá-lo aqui.
@@ -23,7 +24,7 @@ function cors(req: Request) {
   }
 }
 
-Deno.serve(async (req) => {
+servir('apagar-conta', async (req) => {
   const CORS = cors(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   // sem isto, um GET com o header Authorization apagava a conta
@@ -43,19 +44,24 @@ Deno.serve(async (req) => {
     .from('alunos').select('email, username').eq('id', data.user.id).single()
 
   const { error: e2 } = await admin.auth.admin.deleteUser(data.user.id)
-  if (e2) return new Response('falha ao excluir', { status: 500, headers: CORS })
+  if (e2) {
+    reportar(e2, { etapa: 'deleteUser' })
+    return new Response('falha ao excluir', { status: 500, headers: CORS })
+  }
 
   // confirmação de exclusão (best-effort; o cron email-drain envia)
   if (aluno?.email) {
     // a fila não tem FK pra alunos, então o cascade não chega nela: o endereço
     // ficava no welcome, nos comunicados e, se o envio tinha falhado 5 vezes,
     // pra sempre, enquanto o email abaixo diz que tudo foi removido
-    await admin.from('email_queue').delete().eq('to_email', aluno.email)
-    await admin.from('email_queue').insert({
+    const { error: e3 } = await admin.from('email_queue').delete().eq('to_email', aluno.email)
+    if (e3) reportar(e3, { etapa: 'limpar email_queue' })
+    const { error: e4 } = await admin.from('email_queue').insert({
       to_email: aluno.email,
       subject: '[IBSALA] Sua conta foi excluída',
       body: JSON.stringify({ template: 'exclusao', vars: { username: aluno.username } }),
     })
+    if (e4) reportar(e4, { etapa: 'enfileirar email de exclusão' })
   }
 
   return Response.json({ ok: true }, { headers: CORS })

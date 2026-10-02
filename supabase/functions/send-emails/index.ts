@@ -18,6 +18,7 @@
 
 import { segredoConfere } from '../_shared/cron.ts'
 import { drenar, type Item } from './logica.ts'
+import { avisar, reportar, servir } from '../_shared/sentry.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -136,10 +137,11 @@ function renderBody(body: string): string | null {
   }
 }
 
-Deno.serve(async (req) => {
+servir('send-emails', async (req) => {
   if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   if (!RESEND_KEY) {
     // key ainda não configurada: não queima tentativas da fila
+    avisar('send-emails: RESEND_API_KEY ausente, fila parada', 'error')
     return Response.json({ enviados: 0, motivo: 'RESEND_API_KEY ausente' })
   }
 
@@ -164,6 +166,10 @@ Deno.serve(async (req) => {
     },
   })
 
+  if (saida.hold) avisar(`send-emails: Resend segurou a fila com HTTP ${saida.hold}`, 'error', saida)
+  if (saida.presos) avisar(`send-emails: ${saida.presos} email(s) presos`, 'warning', saida)
+  if (saida.motivo === 'teto diário') avisar('send-emails: teto diário atingido', 'warning', saida)
+
   // o `hold` só existia no corpo de uma resposta que ninguém lê: a fila podia
   // ficar parada dias com a key errada e o sintoma era "o email não chegou"
   await rest('config?on_conflict=key', {
@@ -173,7 +179,7 @@ Deno.serve(async (req) => {
       key: 'ultimo_email_drain',
       value: { em: new Date().toISOString(), ...saida },
     }]),
-  }).catch(() => {})
+  }).catch((e) => reportar(e, { etapa: 'marca ultimo_email_drain' }))
 
   return Response.json(saida)
-})
+}, { cron: true })

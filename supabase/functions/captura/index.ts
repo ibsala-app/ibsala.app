@@ -21,6 +21,7 @@
 import { segredoConfere } from '../_shared/cron.ts'
 import { carregarRepertorio, type Repertorio } from '../_shared/repertorio.ts'
 import { anotarCanonicas, parsear } from './logica.ts'
+import { avisar, servir } from '../_shared/sentry.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -136,7 +137,7 @@ async function marcarFrescor(resumo: unknown) {
 
 // ── handler ──────────────────────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+servir('captura', async (req) => {
   if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const corpo = await req.json().catch(() => ({})) as { dry?: boolean; csv?: string }
 
@@ -175,8 +176,18 @@ Deno.serve(async (req) => {
     return Response.json({ ...resumo, dry: true, linhas_detalhe: linhas, disciplinas: disc.sort(), pendentes, multiplas })
   }
 
+  // sala fora do repertório não ocupa nada até alguém revisar: é linha no
+  // salas-repertorio.json + migration, e sem este aviso só a tabela sabia
+  const fora = Object.keys(pendentes)
+  if (fora.length) {
+    avisar(`captura: ${fora.length} sala(s) fora do repertório`, 'warning', { pendentes })
+  }
+  if (Object.keys(multiplas ?? {}).length) {
+    avisar('captura: linha com mais de uma sala canônica', 'info', { multiplas })
+  }
+
   const escrita = await enviar(linhas, rep, pendentes)
   const completo = { ...resumo, ...escrita }
   await marcarFrescor(completo)
   return Response.json({ ...completo, pendentes, multiplas })
-})
+}, { cron: true })

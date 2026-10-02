@@ -24,7 +24,7 @@ import sys
 RAIZ = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 # mexer em qualquer um destes obriga a subir o N: são os arquivos que o navegador
 # guarda por endereço e que o HTML precisa achar em par
-VERSIONADOS = ['web/app.js', 'web/style.css', 'web/config.js', 'web/index.html',
+VERSIONADOS = ['web/app.js', 'web/style.css', 'web/config.js', 'web/index.html', 'web/sentry.js',
                'web/privacidade.html', 'web/termos.html']
 
 
@@ -73,6 +73,11 @@ def main():
                    f'src="app.js?v={n}"' in html)
     ok &= conferir(f'index.html carrega style.css?v={n}',
                    f'href="style.css?v={n}"' in html)
+    ok &= conferir(f'index.html carrega sentry.js?v={n}',
+                   f'src="sentry.js?v={n}"' in html)
+    # o init mora no `sentryOnLoad`, que o loader só chama se ele já existir
+    ok &= conferir('sentry.js vem antes do loader do Sentry',
+                   0 <= html.find('src="sentry.js') < html.find('js.sentry-cdn.com'))
     ok &= conferir(f'app.js importa ./config.js?v={n}',
                    f"'./config.js?v={n}'" in app)
     # as duas páginas soltas entram porque o SHELL do sw.js agora guarda

@@ -17,6 +17,7 @@
 
 import { segredoConfere } from '../_shared/cron.ts'
 import { analisar } from './logica.ts'
+import { avisar, reportar, servir } from '../_shared/sentry.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -50,7 +51,7 @@ async function marcar(resumo: Record<string, unknown>) {
       key: 'ultima_captura_pos',
       value: { em: new Date().toISOString(), ...resumo },
     }]),
-  }).catch(() => {})
+  }).catch((e) => reportar(e, { etapa: 'marca ultima_captura_pos' }))
 }
 
 /** Baixa a planilha. Devolve o texto, ou o motivo do estado degradado. */
@@ -81,7 +82,7 @@ async function baixar(): Promise<{ texto: string } | { motivo: string }> {
   return { texto }
 }
 
-Deno.serve(async (req) => {
+servir('captura-pos', async (req) => {
   if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const corpo = await req.json().catch(() => ({})) as { dry?: boolean; csv?: string }
 
@@ -96,6 +97,7 @@ Deno.serve(async (req) => {
   } else {
     const baixado = await baixar()
     if ('motivo' in baixado) {
+      avisar(`captura-pos degradada: ${baixado.motivo}`, 'warning', { motivo: baixado.motivo })
       await marcar({ estado: 'degradado', motivo: baixado.motivo })
       return Response.json({ estado: 'degradado', motivo: baixado.motivo })
     }
@@ -104,6 +106,7 @@ Deno.serve(async (req) => {
 
   const analise = analisar(texto)
   if (analise.estado === 'degradado') {
+    avisar(`captura-pos degradada: ${analise.motivo}`, 'warning', { motivo: analise.motivo })
     await marcar({ estado: 'degradado', motivo: analise.motivo })
     return Response.json(analise)
   }
@@ -127,6 +130,9 @@ Deno.serve(async (req) => {
     batch,
     ...(escrita ?? {}),
   }
+  if (resumo.sem_sala_canonica) {
+    avisar(`captura-pos: ${resumo.sem_sala_canonica} linha(s) sem sala canônica`, 'info', resumo)
+  }
   await marcar(resumo)
   return Response.json(resumo)
-})
+}, { cron: true })
