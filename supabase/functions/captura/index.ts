@@ -182,8 +182,12 @@ servir('captura', async (req) => {
   if (fora.length) {
     avisar(`captura: ${fora.length} sala(s) fora do repertório`, 'warning', { pendentes })
   }
-  if (Object.keys(multiplas ?? {}).length) {
-    avisar('captura: linha com mais de uma sala canônica', 'info', { multiplas })
+  // barra com várias salas é normal (o front ocupa todas); o que merece aviso é
+  // lado que não casa com sala nenhuma, porque esse lado aparece livre
+  const capengas = Object.fromEntries(Object.entries(multiplas ?? {})
+    .filter(([bruta, lados]) => lados.length < bruta.split('/').length))
+  if (Object.keys(capengas).length) {
+    avisar('captura: lado de barra sem sala no repertório', 'warning', { capengas })
   }
 
   const escrita = await enviar(linhas, rep, pendentes)
