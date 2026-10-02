@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=54'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=55'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
