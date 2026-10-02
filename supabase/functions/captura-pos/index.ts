@@ -40,7 +40,11 @@ async function rest(path: string, init: RequestInit = {}) {
     },
   })
   if (!r.ok) throw new Error(`${path}: ${r.status}`)
-  return r.status === 204 ? null : r.json()
+  // upsert sem `return=representation` responde 201 com corpo VAZIO, e o
+  // `r.json()` lançava depois da escrita já feita. O `.catch(() => {})` da marca
+  // de frescor engolia isso; o Sentry pegou na primeira rodada (IBSALA-Z)
+  const corpo = await r.text()
+  return corpo ? JSON.parse(corpo) : null
 }
 
 async function marcar(resumo: Record<string, unknown>) {
