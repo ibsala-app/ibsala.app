@@ -40,6 +40,9 @@
     S.init({
       release: 'ibsala@v' + versao,
       environment: ambiente,
+      // o smoke do CI roda em 127.0.0.1 com o Supabase bloqueado de propósito, e
+      // cada PR virava evento de "mapa não carregou" (IBSALA-S, 02/10)
+      enabled: ambiente !== 'local',
       sendDefaultPii: false,
       tracesSampleRate: 1.0,
       // só o próprio site: header de trace no supabase.co vira preflight de CORS
