@@ -1,7 +1,58 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=53'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=54'
+
+// ── Sentry ───────────────────────────────────────────────────────────────────
+// O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
+// O loader pode nunca chegar (firewall da faculdade, bloqueador de anúncio), e
+// telemetria não pode virar um segundo erro em cima do primeiro: tudo passa por
+// `onLoad` dentro de try. Com o SDK já carregado, o `onLoad` executa na hora.
+function sentry(fn) {
+  try {
+    window.Sentry?.onLoad?.(() => {
+      try { fn(window.Sentry) } catch { /* telemetria nunca derruba o app */ }
+    })
+  } catch { /* idem */ }
+}
+
+// Breadcrumb e log ao mesmo tempo: o breadcrumb vai junto do próximo evento,
+// o log fica pesquisável sozinho mesmo quando evento nenhum acontece.
+function rastro(categoria, msg, dados, nivel = 'info') {
+  sentry((S) => {
+    S.addBreadcrumb({ category: categoria, message: msg, data: dados, level: nivel })
+    S.logger?.[nivel === 'warning' ? 'warn' : nivel]?.(`${categoria}: ${msg}`, dados)
+  })
+}
+
+// Teto por sessão e por tipo de evento. Em rede que derruba o supabase.co, o
+// poll de 2 em 2 minutos de cada aluno viraria centenas de eventos iguais, e a
+// cota do plano grátis é de 5 mil erros por mês.
+const TETO_POR_CHAVE = 3
+const vezesReportado = new Map()
+
+// Exceção de verdade vira captureException. Objeto de erro do PostgREST (sem
+// stack) vira mensagem com o objeto em `extra`, senão o Sentry junta tudo num
+// grupo só de "Object captured as exception".
+function reportar(erro, { msg, nivel = 'error', tags, extra, chave } = {}) {
+  const k = chave ?? msg ?? String(erro?.message ?? erro)
+  const n = (vezesReportado.get(k) ?? 0) + 1
+  vezesReportado.set(k, n)
+  if (n > TETO_POR_CHAVE) { rastro('reportar', `repetido: ${k}`, { vezes: n }, nivel); return }
+  sentry((S) => S.withScope((escopo) => {
+    escopo.setLevel(nivel)
+    if (tags) escopo.setTags(tags)
+    if (extra) escopo.setExtras(extra)
+    if (chave) escopo.setFingerprint([chave])
+    if (erro instanceof Error) {
+      if (msg) escopo.setExtra('contexto', msg)
+      S.captureException(erro)
+    } else {
+      if (erro) escopo.setExtra('erro', erro)
+      S.captureMessage(msg ?? String(erro?.message ?? erro))
+    }
+  }))
+}
 
 // ANTES de qualquer coisa que possa lançar: se o bundle UMD não chegar, a linha
 // de baixo mata o módulo inteiro, e era ela que impedia o registro do SW novo
@@ -13,6 +64,7 @@ import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=53'
 const registroServiceWorker = 'serviceWorker' in navigator
   ? navigator.serviceWorker.register('/sw.js').catch((erro) => {
       console.warn('Service worker indisponivel neste navegador.', erro)
+      reportar(erro, { msg: 'registro do service worker recusado', nivel: 'warning', chave: 'sw-registro' })
       return null
     })
   : Promise.resolve(null)
@@ -51,13 +103,17 @@ navigator.serviceWorker?.addEventListener('controllerchange', () => {
     return
   }
   recarregandoPraAtualizar = true
+  rastro('sw', 'versão nova assumiu, recarregando')
   location.reload()
 })
 async function procurarAtualizacao() {
   try {
     const reg = await navigator.serviceWorker?.getRegistration()
     await reg?.update()
-  } catch { /* offline, ou sem worker: tenta na próxima */ }
+  } catch (e) {
+    // offline, ou sem worker: tenta na próxima
+    rastro('sw', 'procura de atualização falhou', { erro: String(e) }, 'warning')
+  }
 }
 
 // supabase-js chega via bundle UMD self-hospedado (script defer no index).
@@ -197,6 +253,7 @@ const on = (id, evento, fn, opcoes) => {
 
 let toastTimer
 function toast(msg) {
+  rastro('ui.toast', msg)
   const t = $('toast')
   t.textContent = msg
   t.classList.add('on')
@@ -250,6 +307,8 @@ function mostrar(tela, { push = true } = {}) {
   const secao = $(`tela-${tela}`)
   secao.classList.add('ativa')
   telaAtual = tela
+  rastro('navegacao', tela)
+  sentry((S) => S.setTag('tela', tela))
   window.scrollTo(0, 0)
   if (push) history.pushState({ tela }, '', tela === 'home' ? '#' : `#${tela}`)
   // foco vai pro cabeçalho da tela nova, senão ele fica no botão que acabou de
@@ -318,9 +377,43 @@ function erroLegivel(e) {
 
 // Toda ida ao servidor passa por aqui: teto de tempo, erro classificado, e
 // nenhuma promessa solta morrendo em silêncio no console.
-async function chamar(q, ms = 9000) {
+// Nível de cada tipo no Sentry. `duplicado` e `limite` são o banco dizendo não
+// a um pedido legítimo de recusar, então entram só como info, pra contar.
+const NIVEL_ERRO = {
+  servidor: 'error', invalido: 'error', permissao: 'error', offline: 'error',
+  rede: 'warning', sessao: 'warning', duplicado: 'info', limite: 'info',
+}
+
+// `op` dá nome à chamada quando ela não é um builder do PostgREST (functions)
+function nomeDaChamada(q, op) {
+  if (op) return op
+  try {
+    const caminho = q?.url?.pathname?.replace(/^\/rest\/v1\//, '')
+    if (caminho) return `${q.method ?? 'GET'} ${caminho}`
+  } catch { /* builder de outra versão */ }
+  return 'desconhecida'
+}
+
+function reportarChamada(erro, cru, rota, ms) {
+  reportar(cru instanceof Error ? cru : null, {
+    msg: `chamar ${erro.tipo}: ${rota}${cru?.code ? ` (${cru.code})` : ''}`,
+    nivel: NIVEL_ERRO[erro.tipo] ?? 'error',
+    chave: `chamar|${erro.tipo}|${cru?.code ?? ''}|${rota}`,
+    tags: { 'chamar.tipo': erro.tipo, 'chamar.rota': rota, 'chamar.codigo': cru?.code ?? 'nenhum' },
+    extra: {
+      mensagem_na_tela: erro.msg, teto_ms: ms,
+      codigo: cru?.code, mensagem: cru?.message, detalhes: cru?.details, dica: cru?.hint,
+      status: cru?.status ?? cru?.context?.status,
+    },
+  })
+}
+
+async function chamar(q, ms = 9000, op) {
+  const rota = nomeDaChamada(q, op)
   if (!sb) {
-    return { data: null, error: { tipo: 'offline', msg: 'O app não carregou por completo.' } }
+    const erro = { tipo: 'offline', msg: 'O app não carregou por completo.' }
+    reportarChamada(erro, null, rota, ms)
+    return { data: null, error: erro }
   }
   // Cancelamento de verdade, não só parar de esperar. O `Promise.race` sozinho
   // abandonava a espera e deixava a requisição VIVA: uma escrita que chega no
@@ -332,10 +425,16 @@ async function chamar(q, ms = 9000) {
   let r
   try {
     r = await comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
-  } catch {
-    return { data: null, error: { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' } }
+  } catch (e) {
+    const erro = { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' }
+    reportarChamada(erro, e, rota, ms)
+    return { data: null, error: erro }
   }
-  if (r?.error) return { data: null, error: erroLegivel(r.error) }
+  if (r?.error) {
+    const erro = erroLegivel(r.error)
+    reportarChamada(erro, { ...r.error, status: r.error.status ?? r.status, message: r.error.message }, rota, ms)
+    return { data: null, error: erro }
+  }
   return { data: r?.data ?? null, error: null }
 }
 
@@ -429,7 +528,13 @@ async function carregarAgora({ ghost = false } = {}) {
   let est
   try {
     est = await comTeto(estadoPublico())
-  } catch {
+  } catch (e) {
+    reportar(e, {
+      msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
+      nivel: e?.message === 'tempo esgotado' ? 'warning' : 'error',
+      chave: `mapa|${e?.code ?? e?.message ?? 'erro'}`,
+      tags: { 'mapa.caminho': semRpcEstado ? 'quatro-consultas' : 'estado_publico' },
+    })
     if (meu === seqAgora) falhaNoMapa()
     return false
   }
@@ -441,7 +546,12 @@ async function carregarAgora({ ghost = false } = {}) {
   // salas livres demais e nenhuma aula.
   const mapaNovo = est.igual ? mapaHoje : est.mapa
   const diaUtil = agoraBRT().getDay() >= 1 && agoraBRT().getDay() <= 5
-  if (!mapaNovo.length && diaUtil && slotAtual()) { falhaNoMapa({ vazio: true }); return false }
+  if (!mapaNovo.length && diaUtil && slotAtual()) {
+    // é o sintoma da captura parada (11/08: madrugada inteira sem mapa)
+    reportar(null, { msg: 'mapa de hoje vazio em horário de aula', nivel: 'warning', chave: 'mapa-vazio' })
+    falhaNoMapa({ vazio: true })
+    return false
+  }
 
   $('agora-falha').hidden = true
   $('busca-sem-mapa').hidden = true
@@ -1206,6 +1316,12 @@ function limparDadosNaTela() {
 }
 
 async function carregarPerfil() {
+  // só o id (uuid do auth), nunca email nem username: é o que basta pra juntar
+  // os eventos da mesma pessoa
+  sentry((S) => {
+    S.setUser(sessao ? { id: sessao.user.id } : null)
+    S.setTag('logado', sessao ? 'sim' : 'nao')
+  })
   if (!sessao) {
     perfil = null
     perfilDesconhecido = false
@@ -1228,6 +1344,7 @@ async function carregarPerfil() {
   if (error) { mostrarConta(); toast(error.msg); return }
 
   perfil = data
+  sentry((S) => S.setTag('perfil', perfil ? (perfil.role === 'admin' ? 'admin' : 'aluno') : 'sem-cadastro'))
   mostrarConta()
   aplicarTrava()
   if (perfil) {
@@ -1395,6 +1512,7 @@ function pintarTesteDePush() {
 
 navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data?.tipo !== 'push-teste-recebido') return
+  rastro('push', 'teste recebido no aparelho')
   clearTimeout(timerTeste)
   timerTeste = null
   try { localStorage.setItem(PUSH_OK_CHAVE, String(e.data.em ?? Date.now())) } catch { /* privada */ }
@@ -1420,13 +1538,17 @@ on('btn-push-teste', 'click', async (ev) => {
 async function enviarTeste() {
   clearTimeout(timerTeste)
   statusTeste('Enviado. Esperando ele chegar neste aparelho…')
-  const { data, error } = await chamar(sb.functions.invoke('push-teste', { method: 'POST' }))
+  const { data, error } = await chamar(sb.functions.invoke('push-teste', { method: 'POST' }), 9000, 'fn push-teste')
   if (error) {
     timerTeste = null
     statusTeste(`Não deu pra enviar: ${error.msg}`)
     return
   }
   if (!data?.enviados) {
+    reportar(null, {
+      msg: `push-teste não enviou: ${data?.motivo ?? 'falha no push service'}`,
+      nivel: 'warning', extra: { resposta: data },
+    })
     timerTeste = null
     statusTeste(data?.motivo === 'sem inscricao'
       ? 'Este aparelho não está inscrito. Liga o interruptor acima e tenta de novo.'
@@ -1439,6 +1561,10 @@ async function enviarTeste() {
   // o `finally` do ocupado destrava o botão; o timer é quem decide o texto
   timerTeste = setTimeout(() => {
     timerTeste = null
+    reportar(null, {
+      msg: 'push-teste enviado e não chegou no aparelho', nivel: 'warning',
+      extra: { resposta: data, permissao: window.Notification?.permission },
+    })
     statusTeste('Enviamos, mas ele não chegou aqui em 15 segundos. Confere se a notificação ' +
       'do IBSALA está liberada nos ajustes do aparelho e, no iPhone, se o app foi aberto ' +
       'pelo ícone da Tela de Início.')
@@ -1486,13 +1612,30 @@ on('chk-push', 'change', async (e) => {
       return
     }
     const perm = await pedido
-    if (perm !== 'granted') { toast('Permissão de notificação negada.'); return }
+    if (perm !== 'granted') {
+      reportar(null, { msg: `push: permissão ${perm}`, nivel: 'info', chave: 'push-permissao' })
+      toast('Permissão de notificação negada.')
+      return
+    }
     const reg = await serviceWorkerPronto()
-    if (!reg) { toast('Este navegador bloqueou os avisos.'); return }
-    const nova = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
-    })
+    if (!reg) {
+      reportar(null, { msg: 'push: sem service worker pra inscrever', nivel: 'warning', chave: 'push-sem-sw' })
+      toast('Este navegador bloqueou os avisos.')
+      return
+    }
+    let nova
+    try {
+      nova = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64ParaUint8(VAPID_PUBLIC_KEY),
+      })
+    } catch (erro) {
+      // antes isto subia como rejeição solta: o aluno não via nada e o evento
+      // chegava sem dizer que era a inscrição do push
+      reportar(erro, { msg: 'push: subscribe recusado', chave: 'push-subscribe' })
+      toast('Este navegador recusou os avisos.')
+      return
+    }
     const { error } = await salvarInscricao(nova)
     if (error) { toast(error.msg); await nova.unsubscribe(); return }
     toast('Avisos ativados neste aparelho.')
@@ -1576,7 +1719,13 @@ on('form-reclamacao', 'submit', (e) => {
       aluno_id: sessao.user.id, descricao: desc,
     }))
     toast(error ? error.msg : 'Reclamação enviada. Valeu!')
-    if (!error) $('reclamacao-input').value = ''
+    if (!error) {
+      // a reclamação vai também como feedback: lá ela chega presa ao replay e
+      // aos breadcrumbs da sessão, que é o que faltou pra entender os "não
+      // funciona" de agosto
+      sentry((S) => S.captureFeedback?.({ message: desc }))
+      $('reclamacao-input').value = ''
+    }
   })
 })
 
@@ -1607,7 +1756,7 @@ on('btn-excluir-cancela', 'click', () => {
   $('btn-excluir').focus()
 })
 on('btn-excluir-confirma', 'click', (ev) => ocupado(ev.currentTarget, async () => {
-  const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000)
+  const { error } = await chamar(sb.functions.invoke('apagar-conta'), 20000, 'fn apagar-conta')
   if (error) { toast('Exclusão falhou. Tenta de novo.'); return }
   // se o signOut remoto falhar, a sessão de uma conta que não existe mais fica
   // no aparelho e TODA query passa a falhar em silêncio
@@ -1791,7 +1940,10 @@ on('btn-login', 'click', (ev) => ocupado(ev.currentTarget, async () => {
     options: { redirectTo: location.origin + location.pathname },
   })
   // "não configurado" era a frase pra QUALQUER erro, inclusive rede caída
-  if (error) toast('Não deu pra abrir o login do Google. Tenta de novo.')
+  if (error) {
+    reportar(error, { msg: 'login do Google não abriu', chave: 'login-oauth' })
+    toast('Não deu pra abrir o login do Google. Tenta de novo.')
+  }
 }))
 
 // Sair desliga o aviso deste aparelho. Sem isso a inscrição ficava no banco e o
@@ -1805,14 +1957,16 @@ async function desligarPushDoAparelho() {
     // basta: o push service passa a responder 410 e o push-slot apaga a linha
     await chamar(sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint), 4000)
     await sub.unsubscribe()
-  } catch {
+  } catch (e) {
     // sair nunca fica preso por causa do aviso
+    reportar(e, { msg: 'sair: push do aparelho não desligou', nivel: 'warning', chave: 'sair-push' })
   }
 }
 
 on('btn-sair', 'click', (ev) => ocupado(ev.currentTarget, async () => {
   await desligarPushDoAparelho()
   const { error } = await sb.auth.signOut()
+  if (error) reportar(error, { msg: 'signOut falhou', chave: 'sair' })
   toast(error ? 'Não deu pra sair. Tenta de novo.' : 'Você saiu.')
 }))
 
@@ -2071,6 +2225,7 @@ pintarRelogio()          // cabeçalho vivo desde o primeiro quadro, sem esperar
 if (!sb) {
   // bundle do supabase-js não chegou: em vez de a tela ficar muda com "–" e o
   // aluno achar que o app está quebrado, diz o que houve e oferece recarregar
+  reportar(null, { msg: 'bundle do supabase-js não carregou', chave: 'sem-bundle' })
   $('livres-num').classList.remove('ghost-num')
   $('agora-falha').hidden = false
   $('agora-falha').firstChild.textContent =
@@ -2104,7 +2259,9 @@ if (!sb) {
     pollAtraso = POLL_BASE   // voltou pro primeiro plano: recomeça no ritmo normal
     agendarPoll()
   })
+  window.addEventListener('offline', () => rastro('rede', 'offline', null, 'warning'))
   window.addEventListener('online', () => {
+    rastro('rede', 'online')
     carregarAgora()
     procurarAtualizacao()
     pollAtraso = POLL_BASE
@@ -2117,11 +2274,14 @@ if (!sb) {
 // funcionando em 12/08. `incompleto` é o caso mais brando, em que o módulo foi
 // até o fim mas algum id do HTML não existe: a página funciona quase toda, e
 // sem este aviso ninguém ficaria sabendo (o aluno só vê um botão que não faz
-// nada). O `?.` duplo é pro loader do Sentry bloqueado (firewall da faculdade,
-// bloqueador de anúncio) não virar um segundo erro em cima do primeiro.
+// nada). O `reportar` passa por `onLoad` com try, pra loader do Sentry bloqueado
+// (firewall da faculdade, bloqueador de anúncio) não virar um segundo erro em
+// cima do primeiro.
 if (faltando.length) {
   document.documentElement.dataset.app = 'incompleto'
-  window.Sentry?.captureMessage?.(`ids ausentes no DOM: ${faltando.join(', ')}`, 'error')
+  reportar(null, { msg: `ids ausentes no DOM: ${faltando.join(', ')}`, chave: 'ids-ausentes' })
 } else {
   document.documentElement.dataset.app = 'pronto'
 }
+sentry((S) => S.setTag('app', document.documentElement.dataset.app))
+rastro('boot', document.documentElement.dataset.app, { bundle: !!sb })

@@ -11,6 +11,7 @@ import { segredoConfere } from '../_shared/cron.ts'
 import { hojeBRT, SLOTS } from '../_shared/slots.ts'
 import { enviar } from '../_shared/webpush.ts'
 import { executar } from './logica.ts'
+import { avisar, reportar, servir } from '../_shared/sentry.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -26,16 +27,23 @@ async function rest(path: string, init: RequestInit = {}) {
     },
   })
   if (!r.ok) throw new Error(`${path}: ${r.status}`)
-  return r.status === 204 ? null : r.json()
+  // upsert sem `return=representation` responde 201 com corpo VAZIO, e o
+  // `r.json()` lançava depois da escrita já feita. O `.catch(() => {})` da marca
+  // de frescor engolia isso; o Sentry pegou na primeira rodada (IBSALA-Z)
+  const corpo = await r.text()
+  return corpo ? JSON.parse(corpo) : null
 }
 
-Deno.serve(async (req) => {
+servir('push-slot', async (req) => {
   if (!await segredoConfere(req)) return new Response('nope', { status: 401 })
   const { slot } = await req.json().catch(() => ({}))
   if (!SLOTS[slot]) return new Response('slot inválido', { status: 400 })
 
   const { iso, diaSemana } = hojeBRT()
   const saida = await executar({ rest, enviar, slot, iso, diaSemana })
+  if (saida.falhas) {
+    avisar(`push-slot ${slot}: ${saida.falhas} envio(s) falharam`, 'warning', { slot, ...saida })
+  }
 
   // o pg_cron ignora a resposta (net.http_post é fire and forget), então o
   // resultado fica no banco, como a captura já faz com a marca de frescor
@@ -53,7 +61,7 @@ Deno.serve(async (req) => {
         alunos: saida.alunos,
       },
     }]),
-  }).catch(() => {})
+  }).catch((e) => reportar(e, { etapa: 'marca ultimo_push', slot }))
 
   return Response.json(saida)
-})
+}, { cron: true })

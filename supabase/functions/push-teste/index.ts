@@ -9,6 +9,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { enviar } from '../_shared/webpush.ts'
+import { avisar, servir } from '../_shared/sentry.ts'
 
 // mesma allowlist do apagar-conta: com `*`, qualquer página que tivesse
 // conseguido um token do aluno podia gastá-lo aqui
@@ -28,7 +29,7 @@ function cors(req: Request) {
   }
 }
 
-Deno.serve(async (req) => {
+servir('push-teste', async (req) => {
   const CORS = cors(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') {
@@ -72,5 +73,6 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (falhas) avisar(`push-teste: ${falhas} de ${subs.length} envio(s) falharam`, 'warning', { enviados, limpas, falhas })
   return Response.json({ enviados, limpas, falhas }, { headers: CORS })
 })
