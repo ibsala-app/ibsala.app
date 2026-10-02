@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=55'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=56'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -31,10 +31,18 @@ function rastro(categoria, msg, dados, nivel = 'info') {
 const TETO_POR_CHAVE = 3
 const vezesReportado = new Map()
 
+// Página saindo (reload do SW novo, aluno navegando pra fora): o navegador
+// aborta o fetch em voo e o Safari chama isso de "Load failed". Não é falha do
+// app. Foi o primeiro evento real da v55, no reload da própria atualização.
+let paginaSaindo = false
+window.addEventListener('pagehide', () => { paginaSaindo = true })
+window.addEventListener('pageshow', () => { paginaSaindo = false })
+
 // Exceção de verdade vira captureException. Objeto de erro do PostgREST (sem
 // stack) vira mensagem com o objeto em `extra`, senão o Sentry junta tudo num
 // grupo só de "Object captured as exception".
 function reportar(erro, { msg, nivel = 'error', tags, extra, chave } = {}) {
+  if (paginaSaindo || recarregandoPraAtualizar) return
   const k = chave ?? msg ?? String(erro?.message ?? erro)
   const n = (vezesReportado.get(k) ?? 0) + 1
   vezesReportado.set(k, n)
