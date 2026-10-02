@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=56'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=57'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -688,12 +688,18 @@ const livresFora = (ocupadas) => salas.filter((x) =>
 // ("302/303", motivo `barra-multipla`). Em 24/09 eram 43 aulas assim, e nenhuma
 // tirava sala da lista de livres: 302 e 303 apareciam livres com Arquitetura de
 // Computadores dentro. Por decisão do Josh, par de salas ocupa as DUAS. Cada lado
-// casa com a canônica, ou com "NNN (P2)" -> "P2-NNN"; lado que não casa (auditório,
-// foyer, texto solto) simplesmente não ocupa nada.
+// casa com a canônica, com o codinome da placa ("2L1" -> 217) ou com "NNN (P2)" ->
+// "P2-NNN"; lado que não casa (auditório, foyer, texto solto) não ocupa nada.
+// O codinome entrou em 02/10: desde que a canônica virou o número da porta, os
+// códigos de laboratório são apelido, e "2L1/2L2" deixava 217 e 207 livres com
+// aula dentro (o Sentry pegou pela captura, IBSALA-11).
 function salasDaLinha(r) {
   if (r.sala_canon) return [r.sala_canon]
   if (!String(r.sala ?? '').includes('/')) return []
-  const porChave = new Map(salas.map((x) => [chaveSala(x.sala), x.sala]))
+  const porChave = new Map([
+    ...salas.filter((x) => x.codinome).map((x) => [chaveSala(x.codinome), x.sala]),
+    ...salas.map((x) => [chaveSala(x.sala), x.sala]),     // canônica ganha do codinome
+  ])
   const achadas = String(r.sala).split('/').map((lado) => {
     const k = chaveSala(lado)
     const p2 = k.match(/^(\d{3}) P2\b/)

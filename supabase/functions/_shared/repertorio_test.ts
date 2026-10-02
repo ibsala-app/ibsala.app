@@ -23,6 +23,8 @@ Deno.test('pontuação não separa rótulo de sala', () => {
   // a chave ignora ponto, parêntese e hífen: foi o conserto do #85/#86
   assertEquals(resolverSala('109 (P2) MAKER', rep), ['P2-109', 'apelido'])
   assertEquals(resolverSala('109 (P2) LAB MAKER', rep), ['P2-109', 'apelido'])
+  // grafia nova de 02/10 (IBSALA-10): a P2-101 ficava livre com aula dentro
+  assertEquals(resolverSala('LAB. MATERIAIS CONSTRUÇÃO - 101 (P2)', rep), ['P2-101', 'apelido'])
   assertEquals(resolverSala('204 (P2) LAB MAQUETES', rep), ['P2-204', 'apelido'])
 })
 
