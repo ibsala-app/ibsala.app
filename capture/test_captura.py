@@ -186,8 +186,8 @@ def test_repertorio_integro(rep):
     # apelido órfão apontaria pra sala inexistente e sumiria da conta
     assert all(c in rep["predio"] for c in rep["apelidos"].values())
     assert not set(rep["apelidos"]) & set(rep["salas"])
-    # 83 portas fotografadas em 01/10/2026 (a 316 ainda falta)
-    assert len(rep["predio"]) == 83
+    # 83 portas fotografadas em 01/10/2026, mais a 316 (fechada, migration 0027)
+    assert len(rep["predio"]) == 84
 
 
 def test_repertorio_ambiguo_morre_no_load(tmp_path):
