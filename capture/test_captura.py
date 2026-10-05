@@ -48,6 +48,16 @@ Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
     assert linhas[0]["sala"] == "114 LAB QUIMICA/FISICA"
 
 
+def test_cabecalho_horarios_conserva_turno():
+    csv = """GRADUAÇÃO - MANHÃ,,,,,,,
+Turma,Disciplina,Professor,Horários,Salas,Dia,DATA,Observações
+4 ENG,IBM0731-8001/ELETRICIDADE,SERGIO,07:30/09:20,114,SEGUNDA,5/out.,
+"""
+    linhas = parsear(csv)
+    assert len(linhas) == 1
+    assert linhas[0]["horario"] == "07:30/09:20"
+
+
 def test_outras_reservas_sem_sufixo_continua_reconhecida():
     csv = """OUTRAS RESERVAS,,,,,,,
 Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
@@ -186,8 +196,8 @@ def test_repertorio_integro(rep):
     # apelido órfão apontaria pra sala inexistente e sumiria da conta
     assert all(c in rep["predio"] for c in rep["apelidos"].values())
     assert not set(rep["apelidos"]) & set(rep["salas"])
-    # 83 portas fotografadas em 01/10/2026 (a 316 ainda falta)
-    assert len(rep["predio"]) == 83
+    # 83 portas fotografadas em 01/10/2026, mais a 316 (fechada, migration 0027)
+    assert len(rep["predio"]) == 84
 
 
 def test_repertorio_ambiguo_morre_no_load(tmp_path):

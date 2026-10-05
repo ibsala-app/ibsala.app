@@ -68,6 +68,16 @@ Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
   assertEquals(linhas[0].sala, '114 LAB QUIMICA/FISICA')
 })
 
+Deno.test('cabeçalho Horários conserva o turno da aula', () => {
+  const atual = `GRADUAÇÃO - MANHÃ,,,,,,,
+Turma,Disciplina,Professor,Horários,Salas,Dia,DATA,Observações
+4 ENG,IBM0731-8001/ELETRICIDADE,SERGIO,07:30/09:20,114,SEGUNDA,5/out.,
+`
+  const linhas = parsear(atual, '2026-10-05')
+  assertEquals(linhas.length, 1)
+  assertEquals(linhas[0].horario, '07:30/09:20')
+})
+
 Deno.test('outras reservas sem sufixo continua reconhecida', () => {
   const atual = `OUTRAS RESERVAS,,,,,,,
 Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações

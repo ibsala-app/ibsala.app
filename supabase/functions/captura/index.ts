@@ -160,6 +160,12 @@ servir('captura', async (req) => {
     return Response.json({ linhas: 0, motivo: 'planilha vazia' })
   }
 
+  // Cabeçalho inesperado pode deixar todas as aulas sem horário e apagar o
+  // mapa bom no upsert. Push e ocupação de salas dependem desse campo.
+  if (linhas.some((l) => l.codigo) && !linhas.some((l) => l.codigo && l.horario)) {
+    throw new Error('captura: aulas sem horário; conferir cabeçalho da planilha')
+  }
+
   const rep = carregarRepertorio()
   const { pendentes, multiplas } = anotarCanonicas(linhas, rep)
   const ocupando = linhas.filter((l) => l.sala_canon).length

@@ -93,11 +93,16 @@ export function parsear(textoCsv: string, hoje = hojeISO()): any[] {
     }
   }
 
-  // coluna de horário costuma vir sem header ("colN"); primeira vazia vira Horario
+  // A fonte alterna entre Horário e Horários. Se vier sem header, a primeira
+  // coluna vazia do cabeçalho vira Horario.
   for (const reg of registros) {
     if (!('Horario' in reg)) {
-      for (const k of Object.keys(reg)) {
-        if (k.startsWith('col')) { reg.Horario = reg[k]; delete reg[k]; break }
+      if ('Horarios' in reg) {
+        reg.Horario = reg.Horarios
+      } else {
+        for (const k of Object.keys(reg)) {
+          if (k.startsWith('col')) { reg.Horario = reg[k]; delete reg[k]; break }
+        }
       }
     }
   }

@@ -224,13 +224,17 @@ def parsear(texto_csv):
             if any(v for k, v in reg.items() if k != "Categoria"):
                 registros.append(reg)
 
-    # coluna de horário costuma vir sem header ("colN"); primeira vazia vira Horario
+    # A fonte alterna entre Horário e Horários. Se vier sem header, a primeira
+    # coluna vazia do cabeçalho vira Horario.
     for reg in registros:
         if "Horario" not in reg:
-            for k in list(reg):
-                if k.startswith("col"):
-                    reg["Horario"] = reg.pop(k)
-                    break
+            if "Horarios" in reg:
+                reg["Horario"] = reg["Horarios"]
+            else:
+                for k in list(reg):
+                    if k.startswith("col"):
+                        reg["Horario"] = reg.pop(k)
+                        break
 
     linhas = []
     hoje = datetime.now(BRT).date().isoformat()
