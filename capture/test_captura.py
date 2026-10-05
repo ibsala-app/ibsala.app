@@ -48,6 +48,16 @@ Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
     assert linhas[0]["sala"] == "114 LAB QUIMICA/FISICA"
 
 
+def test_cabecalho_horarios_conserva_turno():
+    csv = """GRADUAÇÃO - MANHÃ,,,,,,,
+Turma,Disciplina,Professor,Horários,Salas,Dia,DATA,Observações
+4 ENG,IBM0731-8001/ELETRICIDADE,SERGIO,07:30/09:20,114,SEGUNDA,5/out.,
+"""
+    linhas = parsear(csv)
+    assert len(linhas) == 1
+    assert linhas[0]["horario"] == "07:30/09:20"
+
+
 def test_outras_reservas_sem_sufixo_continua_reconhecida():
     csv = """OUTRAS RESERVAS,,,,,,,
 Turma,Disciplina,Professor,Horário,Salas,Dia,DATA,Observações
