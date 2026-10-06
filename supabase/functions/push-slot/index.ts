@@ -12,12 +12,13 @@ import { hojeBRT, SLOTS } from '../_shared/slots.ts'
 import { enviar } from '../_shared/webpush.ts'
 import { executar } from './logica.ts'
 import { avisar, reportar, servir } from '../_shared/sentry.ts'
+import { buscar } from '../_shared/retentar.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
 
 async function rest(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${URL_BASE}/rest/v1/${path}`, {
+  const r = await buscar(`${URL_BASE}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: KEY,

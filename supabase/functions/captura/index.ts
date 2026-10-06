@@ -22,6 +22,7 @@ import { segredoConfere } from '../_shared/cron.ts'
 import { carregarRepertorio, type Repertorio } from '../_shared/repertorio.ts'
 import { anotarCanonicas, parsear } from './logica.ts'
 import { avisar, servir } from '../_shared/sentry.ts'
+import { buscar } from '../_shared/retentar.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -35,7 +36,7 @@ const EXPORT_URL =
 // ── escrita ──────────────────────────────────────────────────────────────────
 
 async function post(tabela: string, payload: unknown, onConflict: string, resolution: string) {
-  const r = await fetch(`${URL_BASE}/rest/v1/${tabela}?on_conflict=${onConflict}`, {
+  const r = await buscar(`${URL_BASE}/rest/v1/${tabela}?on_conflict=${onConflict}`, {
     method: 'POST',
     headers: {
       apikey: KEY,
@@ -72,7 +73,7 @@ const chaveMerge = (l: any) =>
 async function apagarFantasmas(dia: string, inicio: string): Promise<number> {
   const url = `${URL_BASE}/rest/v1/mapa_dia?select=id&data=eq.${dia}` +
     `&capturado=lt.${encodeURIComponent(inicio)}`
-  const r = await fetch(url, {
+  const r = await buscar(url, {
     method: 'DELETE',
     headers: {
       apikey: KEY,
