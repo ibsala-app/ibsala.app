@@ -8,6 +8,7 @@
 // comportamento em 1.500 matérias sem tocar em produção.
 
 import { slotDoInicio } from '../_shared/slots.ts'
+import { nomeSala } from '../_shared/nome-sala.ts'
 
 export type Rest = (path: string, init?: RequestInit) => Promise<any>
 export type Resultado = 'enviado' | 'morta' | 'falha'
@@ -180,7 +181,7 @@ export async function executar(dep: {
   await emLotes(subs, concorrencia, async (s) => {
     const aulas = porAluno.get(s.aluno_id)
     if (!aulas) return
-    const salas = [...new Set(aulas.map((a) => a.sala_canon))]
+    const salas = [...new Set(aulas.map((a) => nomeSala(a.sala_canon)))]
     const titulo = salas.length === 1 ? `Sala ${salas[0]}` : `Salas ${salas.join(', ')}`
     const corpo = aulas.map((a) =>
       `${a.disciplina} · ${(a.professor || '').split(' ')[0]} · ${a.horario}`).join('\n')

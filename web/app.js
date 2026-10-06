@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=57'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=58'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -664,9 +664,17 @@ const salaPorNome = (nome) => {
   return salas.find((x) => chaveSala(x.sala) === k) ?? null
 }
 const cursoDaSala = (nome) => salaPorNome(nome)?.curso ?? null
+// Os quatro laboratórios que a planilha e o corredor chamam pelo código da
+// placa: a canônica segue sendo a porta (ocupação e busca não mudam), só o que
+// aparece na tela troca. O 1L1 fica de fora, a planilha escreve 102. Mesma
+// tabela de `supabase/functions/_shared/nome-sala.ts`, que cuida do aviso.
+const PELO_CODINOME = { 217: '2L1', 207: '2L2', 315: '3L1', 307: '3L2' }
+const nomeSala = (canon) => PELO_CODINOME[canon] ?? canon
 function rotuloSala(nome) {
   const s = salaPorNome(nome)
-  return [s?.codinome, s?.curso && `Sala de ${CURSOS[s.curso]}`].filter(Boolean).join(' · ')
+  // quem aparece pelo código ganha a porta no `title`, senão ele repetiria o chip
+  const apelido = s && PELO_CODINOME[s.sala] ? `Sala ${s.sala}` : s?.codinome
+  return [apelido, s?.curso && `Sala de ${CURSOS[s.curso]}`].filter(Boolean).join(' · ')
 }
 // atributos prontos pra entrar no template do cartão
 function attrCurso(nome) {
@@ -729,7 +737,7 @@ function chipsPorPredio(livres) {
     const chips = livres.filter((s) => s.predio === p).map((s) => {
       const c = document.createElement('span')
       c.className = 'sala-chip'
-      c.textContent = s.sala
+      c.textContent = nomeSala(s.sala)
       if (s.curso) c.dataset.curso = s.curso
       const t = rotuloSala(s.sala)
       if (t) c.title = t
@@ -876,7 +884,7 @@ function pintarAgora() {
   rolando.sort(porHorario)
   $('board-agora').replaceChildren(...rolando.map((r) => li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala"${attrCurso(chipSala(r))}>${esc(chipSala(r))}</span>
+    <span class="sala"${attrCurso(chipSala(r))}>${esc(nomeSala(chipSala(r)))}</span>
     <span class="meta">${esc(r.turma)} · ${esc(r.professor)} · ${esc(r.horario)}</span>`)))
   $('agora-vazio').hidden = rolando.length > 0
   pintarPos()
@@ -1180,7 +1188,7 @@ function metaEnxuta(el, completa) {
 function cardAula(r, { adicionar } = {}) {
   const el = li(`
     <span class="disc">${esc(r.disciplina || 'Reserva')}</span>
-    <span class="sala"${attrCurso(chipSala(r))}>${esc(chipSala(r))}</span>
+    <span class="sala"${attrCurso(chipSala(r))}>${esc(nomeSala(chipSala(r)))}</span>
     <span class="meta">${esc(r.horario)} · ${esc(turmaCurta(r.turma))} · ${esc(nomeCurto(r.professor))}</span>`)
   metaEnxuta(el, `hoje · ${r.horario} · ${r.turma} · ${r.professor}`)
   if (adicionar && perfil && r.codigo) el.append(acoesAdicionar(r))
@@ -2169,7 +2177,7 @@ function pintarHoje() {
   board.replaceChildren(...linhasHoje.map(({ m, aula }) => (aula
     ? li(`
       <span class="disc">${esc(m.disciplina)}</span>
-      <span class="sala"${attrCurso(chipSala(aula))}>${esc(chipSala(aula))}</span>
+      <span class="sala"${attrCurso(chipSala(aula))}>${esc(nomeSala(chipSala(aula)))}</span>
       <span class="meta">${esc(aula.horario)} · ${esc(m.turma)}</span>`)
     : li(`
       <span class="disc">${esc(m.disciplina)}</span>
