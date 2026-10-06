@@ -21,6 +21,18 @@ export type Inscricao = { endpoint: string; p256dh: string; auth: string }
  *  honrar o evento de timeout. */
 const TETO_MS = 10_000
 
+/** Prioridade e validade do aviso no push service.
+ *
+ *  Sem `urgency` o web-push manda `normal`, e aí o FCM segura a mensagem até o
+ *  Android sair do Doze e a Apple entrega em modo de economia: o disparo saía no
+ *  segundo certo do cron (12:10:02 em 06/10) e o aviso chegava no celular parado
+ *  na mesa muito depois. `high` acorda o aparelho.
+ *
+ *  Sem `TTL` valem 4 semanas: celular que passou a manhã desligado recebia de
+ *  tarde a sala de uma aula que já tinha acabado. 50 minutos é a antecedência do
+ *  disparo, o mesmo teto que o v1 usava. */
+export const ENTREGA = { TTL: 3000, urgency: 'high' } as const
+
 function comTeto<T>(p: Promise<T>, ms: number): Promise<T> {
   let id: ReturnType<typeof setTimeout> | undefined
   const estouro = new Promise<never>((_, falha) => {
@@ -41,7 +53,7 @@ export async function enviar(s: Inscricao, payload: unknown) {
       webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         JSON.stringify(payload),
-        { timeout: TETO_MS },
+        { timeout: TETO_MS, ...ENTREGA },
       ),
       TETO_MS + 5_000,
     )
