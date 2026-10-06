@@ -88,6 +88,20 @@ GRAD,MONITORIA - CÁLCULO,THIAGO,11:40/12:40,106,SEXTA,11/set.,
   assertEquals(linhas[0].categoria, 'OUTRAS RESERVAS')
 })
 
+Deno.test('cabeçalho de coluna em caixa alta ou com espaço não esvazia a captura', () => {
+  const atual = `GRADUAÇÃO - MANHÃ,,,,,,,
+TURMA,DISCIPLINA,PROFESSOR(A), Horários ,SALA,Dia,DATA,Observações
+3ADM,IBM0022-8001/ JURISDICAO,FULANO,07:30/09:20,2L1,SEXTA,11/set.,
+`
+  const linhas = parsear(atual, '2026-09-11')
+  assertEquals(linhas.length, 1)
+  assertEquals(linhas[0].turma, '3ADM')
+  assertEquals(linhas[0].codigo, 'IBM0022-8001')
+  assertEquals(linhas[0].professor, 'FULANO')
+  assertEquals(linhas[0].horario, '07:30/09:20')
+  assertEquals(linhas[0].sala, '2L1')
+})
+
 Deno.test('sala fora do repertório vai pra quarentena, não vira sala', () => {
   assertEquals(payload().pendentes['SALA DO CAFE'], 2)
 })
