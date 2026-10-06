@@ -43,10 +43,15 @@ export type Analise =
   | { estado: 'ok'; data_fonte: string; linhas: LinhaPos[] }
   | { estado: 'degradado'; motivo: string }
 
-/** Cabeçalho esperado, por posição. A terceira coluna é vazia na fonte e isso é
- *  parte do formato: se ela ganhar nome, o formato mudou e alguém precisa
- *  olhar. */
-const CABECALHO = ['SALA', 'CURSO', '', 'DISCIPLINA', 'PROFESSOR A']
+/** Cabeçalho esperado, por posição, com as grafias aceitas em cada uma.
+ *
+ *  A terceira coluna nasceu sem nome e em 02/10/2026 ganhou `TURMA`: o conteúdo
+ *  é o mesmo de antes (códigos de turma, que vão pra `coluna_c_raw`), mas a
+ *  regra exigia vazio e a pós ficou quatro dias fora do app, degradada a cada
+ *  rodada (IBSALA-13). As duas grafias valem porque a coordenação já voltou
+ *  atrás em cabeçalho antes. Qualquer OUTRO nome ali continua sendo formato
+ *  novo, que alguém precisa olhar. */
+const CABECALHO = [['SALA'], ['CURSO'], ['', 'TURMA'], ['DISCIPLINA'], ['PROFESSOR A']]
 
 /** Rótulos de sala que significam "não é sala física". O repertório já trata
  *  REMOTO, ONLINE, EAD e HIBRIDO como pseudo-sala desde o v1. */
@@ -65,7 +70,7 @@ export function lerData(texto: unknown): string | null {
 }
 
 const igualCabecalho = (valores: string[]) =>
-  CABECALHO.every((esperado, i) => chave(valores[i] ?? '') === esperado)
+  CABECALHO.every((aceitas, i) => aceitas.includes(chave(valores[i] ?? '')))
 
 export function analisar(textoCsv: string, rep: Repertorio = carregarRepertorio()): Analise {
   const linhas = lerCsv(textoCsv)
