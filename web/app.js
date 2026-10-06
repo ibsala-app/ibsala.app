@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=58'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=59'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -427,12 +427,40 @@ async function chamar(q, ms = 9000, op) {
   // abandonava a espera e deixava a requisição VIVA: uma escrita que chega no
   // servidor depois do teto vira linha duplicada quando o aluno toca de novo,
   // que é exatamente o caso do cadastro de matéria em rede de celular.
-  const ctrl = typeof AbortController === 'function' ? new AbortController() : null
-  if (ctrl && typeof q?.abortSignal === 'function') q = q.abortSignal(ctrl.signal)
+  // Cada tentativa tem o próprio controlador: o builder do PostgREST dispara um
+  // fetch novo a cada `then`, e o abort da primeira não pode matar a segunda.
+  const umaVez = () => {
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+    if (ctrl && typeof q?.abortSignal === 'function') q = q.abortSignal(ctrl.signal)
+    return comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
+  }
+  // Só leitura repete depois de estouro ou queda de rede. O iPhone pendura a
+  // primeira requisição quando a aba volta do segundo plano e a seguinte passa
+  // (IBSALA-14 e IBSALA-17, 27 minutos depois do boot). Escrita não entra: é a
+  // linha duplicada do parágrafo de cima.
+  const leitura = !op && (q?.method ?? 'GET') === 'GET'
 
   let r
   try {
-    r = await comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
+    try {
+      r = await umaVez()
+    } catch (e) {
+      if (!leitura) throw e
+      rastro('rede', 'leitura repetida', { rota, motivo: String(e?.message ?? e) }, 'warning')
+      r = await umaVez()
+    }
+    // "JWT issued at future": o token saiu do Auth um instante antes do relógio
+    // do gateway (IBSALA-18, 1 s depois do boot). É recusa na porta, antes de o
+    // banco executar qualquer coisa, então repetir vale até pra escrita.
+    // o supabase-js devolve queda de rede como `error` sem código, não como throw
+    if (leitura && r?.error && !r.error.code && /fetch|load failed|network/i.test(r.error.message ?? '')) {
+      rastro('rede', 'leitura repetida', { rota, motivo: r.error.message }, 'warning')
+      r = await umaVez()
+    }
+    if (r?.error?.code === 'PGRST303') {
+      await new Promise((ok) => setTimeout(ok, 1500))
+      r = await umaVez()
+    }
   } catch (e) {
     const erro = { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' }
     reportarChamada(erro, e, rota, ms)
@@ -535,7 +563,16 @@ async function carregarAgora({ ghost = false } = {}) {
   const meu = ++seqAgora
   let est
   try {
-    est = await comTeto(estadoPublico())
+    try {
+      est = await comTeto(estadoPublico())
+    } catch (e) {
+      // Erro com código é o servidor respondendo não, e repetir não muda nada.
+      // Sem código é rede: teto estourado ou `Failed to fetch`, que no celular
+      // costuma ser a primeira requisição depois de a aba acordar (IBSALA-S)
+      if (e?.code) throw e
+      rastro('rede', 'mapa repetido', { motivo: String(e?.message ?? e) }, 'warning')
+      est = await comTeto(estadoPublico())
+    }
   } catch (e) {
     reportar(e, {
       msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
