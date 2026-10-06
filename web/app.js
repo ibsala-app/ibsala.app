@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=60'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=61'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -372,10 +372,13 @@ const comTeto = (p, ms = 9000, aoEstourar) => Promise.race([
 function erroLegivel(e) {
   const c = e?.code ?? ''
   if (c === '23505') return { tipo: 'duplicado', msg: 'Isso já está na sua lista.' }
-  if (c === 'PGRST301' || e?.status === 401 || e?.status === 403) {
+  // permissão ANTES de sessão: recusa de RLS também chega com 403
+  if (c === '42501') return { tipo: 'permissao', msg: 'Sua conta não tem permissão pra isso.' }
+  // PGRST301 é token ilegível e PGRST303 é token vencido ou fora do relógio.
+  // 403 não entra: é permissão, e mandar a pessoa logar de novo não resolve
+  if (c === 'PGRST301' || c === 'PGRST303' || e?.status === 401) {
     return { tipo: 'sessao', msg: 'Sua sessão expirou. Entra de novo.' }
   }
-  if (c === '42501') return { tipo: 'permissao', msg: 'Sua conta não tem permissão pra isso.' }
   // quota por aluno (migration 0016): a mensagem já vem escrita pro aluno ler,
   // e é a única do banco que a tela mostra como veio
   if (c === 'P0001') return { tipo: 'limite', msg: e?.message || 'Você chegou no limite.' }
@@ -434,10 +437,12 @@ async function chamar(q, ms = 9000, op) {
     if (ctrl && typeof q?.abortSignal === 'function') q = q.abortSignal(ctrl.signal)
     return comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
   }
-  // Só leitura repete depois de estouro ou queda de rede. O iPhone pendura a
+  // Só leitura repete, e só depois de ESTOURO do teto. O iPhone pendura a
   // primeira requisição quando a aba volta do segundo plano e a seguinte passa
-  // (IBSALA-14 e IBSALA-17, 27 minutos depois do boot). Escrita não entra: é a
-  // linha duplicada do parágrafo de cima.
+  // (IBSALA-14 e IBSALA-17, 27 minutos depois do boot). `Failed to fetch` fica
+  // de fora: o supabase-js já repete GET três vezes sozinho (1, 2 e 4 s), e
+  // repetir por cima dobrava a espera até o erro, de 7 pra 14 s. Escrita não
+  // entra: é a linha duplicada do parágrafo de cima.
   const leitura = !op && (q?.method ?? 'GET') === 'GET'
 
   let r
@@ -451,13 +456,9 @@ async function chamar(q, ms = 9000, op) {
     }
     // "JWT issued at future": o token saiu do Auth um instante antes do relógio
     // do gateway (IBSALA-18, 1 s depois do boot). É recusa na porta, antes de o
-    // banco executar qualquer coisa, então repetir vale até pra escrita.
-    // o supabase-js devolve queda de rede como `error` sem código, não como throw
-    if (leitura && r?.error && !r.error.code && /fetch|load failed|network/i.test(r.error.message ?? '')) {
-      rastro('rede', 'leitura repetida', { rota, motivo: r.error.message }, 'warning')
-      r = await umaVez()
-    }
-    if (r?.error?.code === 'PGRST303') {
+    // banco executar qualquer coisa, então repetir vale até pra escrita. O
+    // mesmo código cobre token VENCIDO, que esperar não cura: esse não repete.
+    if (r?.error?.code === 'PGRST303' && /future/i.test(r.error.message ?? '')) {
       await new Promise((ok) => setTimeout(ok, 1500))
       r = await umaVez()
     }
@@ -467,8 +468,11 @@ async function chamar(q, ms = 9000, op) {
     return { data: null, error: erro }
   }
   if (r?.error) {
-    const erro = erroLegivel(r.error)
-    reportarChamada(erro, { ...r.error, status: r.error.status ?? r.status, message: r.error.message }, rota, ms)
+    // o status HTTP mora em `r.status`, fora do objeto de erro: sem juntar os
+    // dois, sessão vencida sem código caía em "Sem resposta do servidor"
+    const cru = { ...r.error, status: r.error.status ?? r.status, message: r.error.message }
+    const erro = erroLegivel(cru)
+    reportarChamada(erro, cru, rota, ms)
     return { data: null, error: erro }
   }
   return { data: r?.data ?? null, error: null }
@@ -501,55 +505,30 @@ let seqAgora = 0
 // pessoal, então cabe numa função só, que dá pra cachear e é o caminho único
 // pro dia em que o firewall do campus obrigar a servir por ibsala.com.br.
 //
-// Enquanto a migration 0018 não estiver aplicada, o app continua funcionando
-// pelas quatro consultas de antes: a decisão é tomada UMA vez por carga, e só
-// quando o servidor diz que a função não existe (PGRST202). Erro de rede não
-// dispara o desvio, senão a tentativa custaria o dobro justamente quando a rede
-// está ruim.
-let semRpcEstado = false
+// A marca que o servidor devolve NÃO é gravada aqui. Era, e resposta atrasada
+// (teto estourado, ou carga mais nova já em voo) avançava `marcaEstado` sem a
+// tela ter pintado aquele estado: o "Tentar de novo" seguinte recebia
+// `mudou: false`, o app olhava pro mapa vazio da memória e anunciava "o mapa de
+// hoje ainda não chegou", com alarme falso de captura parada no Sentry. Quem
+// grava é o `carregarAgora`, depois de aplicar o estado.
+//
+// O desvio das quatro consultas, de quando a 0018 ainda não estava aplicada,
+// saiu em 06/10/2026: a função já foi redefinida três vezes desde então, e no
+// desvio a pós sumia da tela pelo resto da sessão.
 let marcaEstado = null
 
 async function estadoPublico() {
-  if (!semRpcEstado) {
-    const r = await sb.rpc('estado_publico', { marca: marcaEstado })
-    if (!r.error) {
-      const d = r.data ?? {}
-      marcaEstado = d.marca ?? null
-      // nada mudou desde a última carga: o mapa e as salas que já estão na
-      // memória seguem valendo, e vieram só config e total
-      if (d.mudou === false) {
-        return { igual: true, config: d.config ?? [], total: d.total ?? null }
-      }
-      return {
-        igual: false, mapa: d.mapa ?? [], salas: d.salas ?? [],
-        pos: d.pos ?? [], config: d.config ?? [], total: d.total ?? null,
-      }
-    }
-    if (r.error?.code !== 'PGRST202') throw r.error
-    semRpcEstado = true
+  const r = await sb.rpc('estado_publico', { marca: marcaEstado })
+  if (r.error) throw r.error
+  const d = r.data ?? {}
+  // nada mudou desde a última carga: o mapa e as salas que já estão na memória
+  // seguem valendo, e vieram só config e total
+  if (d.mudou === false) {
+    return { igual: true, marca: d.marca ?? null, config: d.config ?? [], total: d.total ?? null }
   }
-
-  const [mapa, inv, conf, quantos] = await Promise.all([
-    sb.from('mapa_dia').select('turma,codigo,disciplina,horario,professor,sala,sala_canon')
-      .eq('data', hojeISO()),
-    // `*` e não a lista de colunas: antes da 0025 `modalidade` não existe e
-    // pedir por nome derrubaria a tela inteira
-    sb.from('salas').select('*').eq('ativa', true).order('sala'),
-    sb.from('config').select('key,value'),
-    sb.rpc('total_alunos'),
-  ])
-  // mapa e salas são o que a tela precisa pra existir; config e total são
-  // enfeite que pode faltar, como já era antes
-  if (mapa.error || inv.error) throw mapa.error ?? inv.error
   return {
-    igual: false,
-    mapa: mapa.data ?? [],
-    salas: inv.data ?? [],
-    // a pós vive na RPC (0019). No caminho de compatibilidade ela some da tela
-    // inteira, que é melhor do que uma quinta requisição por carga
-    pos: [],
-    config: conf.error ? [] : (conf.data ?? []),
-    total: quantos.error ? null : quantos.data,
+    igual: false, marca: d.marca ?? null, mapa: d.mapa ?? [], salas: d.salas ?? [],
+    pos: d.pos ?? [], config: d.config ?? [], total: d.total ?? null,
   }
 }
 
@@ -568,17 +547,19 @@ async function carregarAgora({ ghost = false } = {}) {
     } catch (e) {
       // Erro com código é o servidor respondendo não, e repetir não muda nada.
       // Sem código é rede: teto estourado ou `Failed to fetch`, que no celular
-      // costuma ser a primeira requisição depois de a aba acordar (IBSALA-S)
+      // costuma ser a primeira requisição depois de a aba acordar (IBSALA-S).
+      // A RPC é POST, então o retry nativo do supabase-js (só GET) não cobre.
+      // A segunda tem teto menor: rede boa responde em menos de 1 s, e rede
+      // que pendura não merece 18 s de esqueleto pra admitir a falha
       if (e?.code) throw e
       rastro('rede', 'mapa repetido', { motivo: String(e?.message ?? e) }, 'warning')
-      est = await comTeto(estadoPublico())
+      est = await comTeto(estadoPublico(), 5000)
     }
   } catch (e) {
     reportar(e, {
       msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
       nivel: e?.message === 'tempo esgotado' ? 'warning' : 'error',
       chave: `mapa|${e?.code ?? e?.message ?? 'erro'}`,
-      tags: { 'mapa.caminho': semRpcEstado ? 'quatro-consultas' : 'estado_publico' },
     })
     if (meu === seqAgora) falhaNoMapa()
     return false
@@ -602,6 +583,7 @@ async function carregarAgora({ ghost = false } = {}) {
   $('busca-sem-mapa').hidden = true
   mapaCarregado = true
   mapaHoje = mapaNovo
+  marcaEstado = est.marca      // só agora: este estado está na memória e na tela
   if (!est.igual) {
     salas = est.salas
     posHoje = est.pos ?? []
@@ -723,8 +705,8 @@ function attrCurso(nome) {
 // O que entra na lista de livres: sala de aula e sala de estudo. `so_aula` é
 // laboratório que recebe aula mas não fica aberto, `fechada` é secretaria, área
 // técnica e afins. Sala de estudo nunca recebe aula, então a ocupação nem
-// conta. Sem `modalidade` (RPC de antes da 0025) tudo entra, como era.
-const naLista = (x) => !x.modalidade || x.modalidade === 'aula' || x.modalidade === 'estudo'
+// conta.
+const naLista = (x) => x.modalidade === 'aula' || x.modalidade === 'estudo'
 const livresFora = (ocupadas) => salas.filter((x) =>
   naLista(x) && (x.modalidade === 'estudo' || !ocupadas.has(x.sala)))
 
@@ -795,9 +777,7 @@ const FILTROS = ['agora', 'proximo', 'fim', 'turnos']
 let filtroLivres = 'agora'
 try {
   const f = localStorage.getItem(FILTRO_CHAVE)
-  // quem tinha ligado o antigo "Ver o resto do dia" continua vendo turno a turno
-  filtroLivres = FILTROS.includes(f) ? f
-    : localStorage.getItem('ibsala:dia-todo') === '1' ? 'turnos' : 'agora'
+  filtroLivres = FILTROS.includes(f) ? f : 'agora'
 } catch { /* privada */ }
 
 // fora de horário de aula o resto do dia começa no próximo turno; depois do
@@ -936,7 +916,7 @@ function pintarAgora() {
 
   // frescor à vista: número sem hora não diz se é de agora ou das 3 da manhã
   const cap = cfg.ultima_captura
-  const em = cap && (cap.em ?? cap.quando ?? cap)
+  const em = cap?.em
   const quando = em ? new Date(em) : null
   const valido = quando && !isNaN(quando)
   $('pill-frescor').hidden = !valido
@@ -958,11 +938,12 @@ function pintarAgora() {
 
 function falhaNoMapa({ vazio = false } = {}) {
   mapaCarregado = false
+  marcaEstado = null                    // a próxima carga pede o mapa inteiro
   pintarRelogio()                       // data e turno não dependem do servidor
   $('agora-falha').hidden = false
   $('agora-falha').firstChild.textContent = vazio
     ? 'O mapa de hoje ainda não chegou da planilha da faculdade. Ele é capturado ' +
-      'de 20 em 20 minutos a partir das 5h. '
+      'às 5h e, das 7h em diante, de 20 em 20 minutos. '
     : 'Não deu pra carregar o mapa de hoje. Se você está na rede da faculdade, ' +
       'ela pode estar bloqueando o servidor do app: tenta pelo 4G ou 5G. '
   $('livres-num').classList.remove('ghost-num')
@@ -1046,7 +1027,8 @@ for (const tela of Object.values(BUSCAS)) {
 // `sala_canon` entra: o placeholder promete busca por sala, mas só o rótulo cru
 // da planilha era olhado, então procurar "P2-202" (o número que está na porta)
 // não achava nada
-const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_canon, r.turma]
+const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_canon,
+  nomeSala(r.sala_canon), r.turma]
   .some((v) => String(v ?? '').toLowerCase().includes(alvo))
 
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
@@ -1374,7 +1356,16 @@ function limparDadosNaTela() {
   $('bloco-admin').hidden = true
 }
 
+// Duas cargas de perfil em voo (login e logout em seguida) escreviam `perfil`
+// sem ordem: a resposta da conta que saiu regravava o perfil por cima do null.
+let seqPerfil = 0
+// Tela logada pedida pelo endereço no boot (`#ajustes`, `#materias`, `#admin`).
+// O `mostrar` roda antes de o auth resolver e troca por `conta`; sem guardar o
+// pedido, recarregar a página em Ajustes devolvia sempre a tela de conta.
+let telaPedida = null
+
 async function carregarPerfil() {
+  const meu = ++seqPerfil
   // só o id (uuid do auth), nunca email nem username: é o que basta pra juntar
   // os eventos da mesma pessoa
   sentry((S) => {
@@ -1382,6 +1373,7 @@ async function carregarPerfil() {
     S.setTag('logado', sessao ? 'sim' : 'nao')
   })
   if (!sessao) {
+    telaPedida = null
     perfil = null
     perfilDesconhecido = false
     limparDadosNaTela()
@@ -1395,6 +1387,7 @@ async function carregarPerfil() {
   const { data, error } = await chamar(sb.from('alunos')
     .select('id,username,email,role,bloqueado,receber_email')
     .eq('id', sessao.user.id).maybeSingle())
+  if (meu !== seqPerfil) return
 
   // "não tenho perfil" é diferente de "não sei se tenho perfil". Com o erro
   // tratado como ausência, uma falha de rede convidava quem já tem conta a
@@ -1417,6 +1410,12 @@ async function carregarPerfil() {
     $('bloco-admin').hidden = !adm
     $('btn-abrir-admin').hidden = !adm
     if (adm) carregarAdmin()
+  }
+  if (telaPedida) {
+    const tela = telaPedida
+    telaPedida = null
+    // só se a pessoa não saiu da tela de conta enquanto o perfil carregava
+    if (perfil && telaAtual === 'conta') mostrar(tela, { push: false })
   }
 }
 
@@ -1514,7 +1513,7 @@ async function atualizarBotaoPush() {
   }
   chk.disabled = false
   rotulo.textContent = 'Avisos neste aparelho'
-  dica.textContent = 'Você recebe a sala de cada aula ~50 minutos antes do horário.'
+  dica.textContent = 'Você recebe a sala de cada aula cerca de 1 hora antes do horário.'
 
   // O interruptor lia só o PushManager do navegador. Quando a linha sumia do
   // banco (o push-slot apaga a inscrição no 410) o aluno via "ligado", confiava,
@@ -1980,13 +1979,17 @@ on('btn-alunos-mais', 'click', (ev) => ocupado(ev.currentTarget, async () => {
 // busca no servidor, não filtro do que já veio: com 1.000 alunos a tela nunca
 // tem a base inteira em memória pra filtrar
 let timerAdminBusca
+let seqAdminBusca = 0
 on('admin-busca', 'input', (ev) => {
   clearTimeout(timerAdminBusca)
   const termo = ev.target.value
   timerAdminBusca = setTimeout(async () => {
     alunosPag.busca = termo
     alunosPag.cursor = null
+    const meu = ++seqAdminBusca
     const { data, error } = await paginaAlunos(null)
+    // resposta lenta de um termo antigo não pinta por cima da mais nova
+    if (meu !== seqAdminBusca) return
     if (error) { toast(error.msg); return }
     pintarAlunos(data ?? [], false)
   }, 300)
@@ -2206,7 +2209,14 @@ function pintarHoje() {
     const aulas = mapaHoje.filter((r) => (m.codigo && r.codigo === m.codigo) ||
       (!m.codigo && r.disciplina === m.disciplina))
     if (!aulas.length) return [{ m, aula: null, ini: Infinity }]
-    return aulas.map((a) => ({ m, aula: a, ini: faixaHoraria(a.horario)?.[0] ?? Infinity }))
+    // a mesma aula pode vir em duas categorias da planilha; "Agora" e a busca
+    // já tiravam a repetida, aqui ela aparecia duas vezes
+    const vistas = new Set()
+    const unicas = aulas.filter((a) => {
+      const k = [a.horario, a.sala, a.disciplina, a.turma, a.professor].join('|')
+      return !vistas.has(k) && vistas.add(k)
+    })
+    return unicas.map((a) => ({ m, aula: a, ini: faixaHoraria(a.horario)?.[0] ?? Infinity }))
   })
   // sem horário conhecido vai pro fim, e empate desempata por disciplina
   linhasHoje.sort((a, b) => a.ini - b.ini || a.m.disciplina.localeCompare(b.m.disciplina, 'pt-BR'))
@@ -2219,8 +2229,9 @@ function pintarHoje() {
     : li(`
       <span class="disc">${esc(m.disciplina)}</span>
       <span class="sala sala-vazia" aria-label="sala desconhecida">—</span>
-      <span class="meta">${mapaCarregado ? 'sem sala no mapa de hoje'
-        : 'mapa de hoje indisponível'} · ${esc(m.turma)}</span>`))))
+      <span class="meta">${hoje === 6 ? 'a faculdade não publica mapa de salas no sábado'
+        : mapaCarregado ? 'sem sala no mapa de hoje'
+          : 'mapa de hoje indisponível'} · ${esc(m.turma)}</span>`))))
   $('hoje-vazio').hidden = deHoje.length > 0
 }
 
@@ -2246,6 +2257,7 @@ async function adicionarMateria(r, dia, btn) {
 aplicarIntencao('entrar')
 const telaInicial = location.hash.replace('#', '')
 history.replaceState({ tela: TELAS.includes(telaInicial) ? telaInicial : 'home' }, '', location.hash || '#')
+if (TELAS_LOGADO.includes(telaInicial)) telaPedida = telaInicial
 if (TELAS.includes(telaInicial) && telaInicial !== 'home') mostrar(telaInicial, { push: false })
 
 procurarAtualizacao()
@@ -2303,8 +2315,14 @@ if (!sb) {
   // sem bundle não vai existir sessão nenhuma pra esperar
   destravarMenu()
 } else {
-  sb.auth.onAuthStateChange((_ev, s) => {
+  sb.auth.onAuthStateChange((ev, s) => {
+    // O supabase-js emite SIGNED_IN toda vez que a aba volta a ficar visível com
+    // sessão válida. Recarregar o perfil ali custava 3 leituras por volta ao
+    // app (6 pra admin), piscava "Minhas aulas" em esqueleto e regravava o
+    // campo de nome por cima do que o aluno estava digitando em Ajustes.
+    const mesmaPessoa = !!s?.user?.id && s.user.id === sessao?.user?.id
     sessao = s
+    if (mesmaPessoa && perfil && (ev === 'SIGNED_IN' || ev === 'TOKEN_REFRESHED')) return
     carregarPerfil()
   })
 
