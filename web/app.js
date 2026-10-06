@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=59'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=60'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -1117,7 +1117,7 @@ async function buscar(termo, tela) {
   // matéria pessoal sem isso não vira aviso nenhum
   const daPos = tela.adicionar
     ? []
-    : posHoje.filter((r) => [r.disciplina, r.professor, r.curso, r.sala]
+    : posHoje.filter((r) => [r.disciplina, r.professor, r.curso, r.sala, nomeSala(r.sala)]
         .some((v) => semAcentoJs(v).includes(semAcentoJs(termo))))
 
   const cards = [
@@ -1175,11 +1175,11 @@ function pintarPos() {
 function cardPos(r) {
   const el = li(`
     <span class="disc"><span class="tag-pos">PÓS</span>${esc(r.disciplina || 'Aula da pós')}</span>
-    <span class="sala">${esc(r.sala || (r.modalidade === 'remoto' ? 'Remoto' : '—'))}</span>
+    <span class="sala">${esc(nomeSala(r.sala) || (r.modalidade === 'remoto' ? 'Remoto' : '—'))}</span>
     <span class="meta">${esc(nomeCurto(r.professor))}</span>
     <span class="curso">${esc(r.curso || 'Pós-graduação')}${dataPos(r) ? ` · planilha de ${dataPos(r)}` : ''}</span>`)
   el.dataset.origem = 'pos'
-  metaEnxuta(el, [r.curso, r.professor, r.sala].filter(Boolean).join(' · '))
+  metaEnxuta(el, [r.curso, r.professor, nomeSala(r.sala)].filter(Boolean).join(' · '))
   return el
 }
 
