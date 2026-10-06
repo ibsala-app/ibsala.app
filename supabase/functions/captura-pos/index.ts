@@ -18,6 +18,7 @@
 import { segredoConfere } from '../_shared/cron.ts'
 import { analisar } from './logica.ts'
 import { avisar, reportar, servir } from '../_shared/sentry.ts'
+import { buscar } from '../_shared/retentar.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
 const KEY = Deno.env.get('SERVICE_KEY')!
@@ -30,7 +31,7 @@ const TETO_MS = 20_000
 const TETO_BYTES = 2 * 1024 * 1024
 
 async function rest(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${URL_BASE}/rest/v1/${path}`, {
+  const r = await buscar(`${URL_BASE}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: KEY,
