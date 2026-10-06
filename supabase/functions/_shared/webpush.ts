@@ -29,8 +29,10 @@ const TETO_MS = 10_000
  *  na mesa muito depois. `high` acorda o aparelho.
  *
  *  Sem `TTL` valem 4 semanas: celular que passou a manhã desligado recebia de
- *  tarde a sala de uma aula que já tinha acabado. 50 minutos é a antecedência do
- *  disparo, o mesmo teto que o v1 usava. */
+ *  tarde a sala de uma aula que já tinha acabado. 3.000 s é o PISO, não a regra:
+ *  o `push-slot` passa a validade de cada aviso, porque o disparo das 12:10 é
+ *  pra aula das 13:30 e o das 17:10 pra aula das 18:40, e com 50 minutos fixos
+ *  o aviso vencia antes de a aula começar pra quem estava sem sinal. */
 export const ENTREGA = { TTL: 3000, urgency: 'high' } as const
 
 function comTeto<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -43,7 +45,7 @@ function comTeto<T>(p: Promise<T>, ms: number): Promise<T> {
 
 // 'enviado' | 'morta' (404/410: o push service não conhece mais o endpoint, quem
 // chamou tem que apagar a linha) | 'falha' (o resto, que vale tentar de novo)
-export async function enviar(s: Inscricao, payload: unknown) {
+export async function enviar(s: Inscricao, payload: unknown, ttl: number = ENTREGA.TTL) {
   // host fora da lista nem chega na rede. 'falha' e não 'morta': apagar a linha
   // é decisão de push service, e um host legítimo que faltou na lista não pode
   // custar a inscrição de ninguém
@@ -53,7 +55,7 @@ export async function enviar(s: Inscricao, payload: unknown) {
       webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         JSON.stringify(payload),
-        { timeout: TETO_MS, ...ENTREGA },
+        { timeout: TETO_MS, ...ENTREGA, TTL: Math.max(ENTREGA.TTL, Math.round(ttl)) },
       ),
       TETO_MS + 5_000,
     )

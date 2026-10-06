@@ -7,13 +7,14 @@
 // entram por parâmetro, então o teste passa um `fetch` de mentira e mede o
 // comportamento em 1.500 matérias sem tocar em produção.
 
-import { slotDoInicio } from '../_shared/slots.ts'
+import { faixaHoraria, slotDoInicio } from '../_shared/slots.ts'
+import { carregarRepertorio, ladosDaBarra, type Repertorio } from '../_shared/repertorio.ts'
 import { nomeSala } from '../_shared/nome-sala.ts'
 
 export type Rest = (path: string, init?: RequestInit) => Promise<any>
 export type Resultado = 'enviado' | 'morta' | 'falha'
 export type Inscricao = { endpoint: string; p256dh: string; auth: string; aluno_id: string }
-export type Enviar = (s: Inscricao, payload: unknown) => Promise<Resultado>
+export type Enviar = (s: Inscricao, payload: unknown, ttl?: number) => Promise<Resultado>
 
 /** Teto de linhas por resposta. É o `db.max_rows` do Supabase, que vale para
  *  todo projeto que não mexeu nisso. */
@@ -128,6 +129,34 @@ export function maisRecentePorCodigo(linhas: any[]): Map<string, any> {
   return por
 }
 
+/** Salas que a linha manda o aluno procurar.
+ *
+ *  A captura resolve UMA canônica por linha e deixa `sala_canon` nulo quando o
+ *  rótulo junta duas salas de verdade ("302/303", "2L1/2L2"). O filtro daqui
+ *  exigia canônica pra barrar CANCELADA e ONLINE, e levava os pares junto: o
+ *  site ocupa as duas salas desde 24/09 e o aviso nunca saía, sem erro em log.
+ *  Lado que não é sala (auditório, texto solto) não entra; linha em que nenhum
+ *  lado resolve continua de fora. */
+export function salasDaAula(r: any, rep: Repertorio): string[] {
+  if (r.sala_canon) return [r.sala_canon]
+  if (!String(r.sala ?? '').includes('/')) return []
+  return ladosDaBarra(String(r.sala), rep)
+}
+
+/** Folga depois do início da aula: quem liga o celular já no corredor ainda
+ *  aproveita o aviso. */
+export const FOLGA_TTL_MIN = 15
+
+/** Validade do aviso em segundos: até o início da aula mais tardia do aluno no
+ *  slot, mais a folga. Sem relógio (teste antigo) ou sem horário legível, quem
+ *  decide é o piso do `enviar`. */
+export function ttlDoAviso(aulas: any[], agoraMin: number | undefined): number | undefined {
+  if (agoraMin == null) return undefined
+  const inicios = aulas.map((a) => faixaHoraria(a.horario)?.[0]).filter((v) => v != null) as number[]
+  if (!inicios.length) return undefined
+  return (Math.max(...inicios) + FOLGA_TTL_MIN - agoraMin) * 60
+}
+
 export type Saida = {
   enviados: number
   falhas: number
@@ -144,9 +173,13 @@ export async function executar(dep: {
   slot: string
   iso: string
   diaSemana: number
+  /** minutos desde a meia-noite em Brasília, pra validade do aviso */
+  agoraMin?: number
   concorrencia?: number
+  rep?: Repertorio
 }): Promise<Saida> {
-  const { rest, enviar, slot, iso, diaSemana, concorrencia = CONCORRENCIA } = dep
+  const { rest, enviar, slot, iso, diaSemana, agoraMin, concorrencia = CONCORRENCIA } = dep
+  const rep = dep.rep ?? carregarRepertorio()
   const vazio = { enviados: 0, falhas: 0, limpas: 0, alunos: 0, subs: 0 }
 
   // `sala_canon` e não `sala`: o rótulo cru da planilha ia inteiro pro título da
@@ -154,9 +187,9 @@ export async function executar(dep: {
   // como CANCELADA e ONLINE, que tem canônica nula de propósito justamente pra
   // não ocupar nada, chegava no aluno como "Sala CANCELADA".
   const mapa = await paginar(rest, `mapa_dia?data=eq.${iso}` +
-    `&select=id,codigo,disciplina,horario,professor,sala_canon,capturado`)
+    `&select=id,codigo,disciplina,horario,professor,sala,sala_canon,capturado`)
   const doSlot = mapa.filter((r) =>
-    r.codigo && r.sala_canon && slotDoInicio(r.horario) === slot)
+    r.codigo && salasDaAula(r, rep).length && slotDoInicio(r.horario) === slot)
   if (!doSlot.length) return { ...vazio, motivo: 'mapa vazio no slot' }
   const porCodigo = maisRecentePorCodigo(doSlot)
 
@@ -181,11 +214,12 @@ export async function executar(dep: {
   await emLotes(subs, concorrencia, async (s) => {
     const aulas = porAluno.get(s.aluno_id)
     if (!aulas) return
-    const salas = [...new Set(aulas.map((a) => nomeSala(a.sala_canon)))]
+    const salas = [...new Set(aulas.flatMap((a) => salasDaAula(a, rep)).map(nomeSala))]
     const titulo = salas.length === 1 ? `Sala ${salas[0]}` : `Salas ${salas.join(', ')}`
     const corpo = aulas.map((a) =>
       `${a.disciplina} · ${(a.professor || '').split(' ')[0]} · ${a.horario}`).join('\n')
-    const r = await enviar(s, { title: titulo, body: corpo, tag: `ibsala-${slot}` })
+    const r = await enviar(s, { title: titulo, body: corpo, tag: `ibsala-${slot}` },
+      ttlDoAviso(aulas, agoraMin))
     if (r === 'enviado') {
       enviados++
     } else if (r === 'morta') {
