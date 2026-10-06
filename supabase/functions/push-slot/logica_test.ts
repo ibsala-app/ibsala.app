@@ -242,3 +242,25 @@ Deno.test('mapa sem aula no slot não busca matéria nenhuma', async () => {
   assertEquals(saida.motivo, 'mapa vazio no slot')
   assertEquals(chamadas.filter((c) => c.includes('materias')).length, 0)
 })
+
+Deno.test('laboratório sai no título pelo código da placa, não pela porta', async () => {
+  const banco = bancoGrande(2, 2, 1)
+  banco.mapa[0].sala_canon = '217'      // ARQ1
+  banco.mapa[1].sala_canon = 'P2-204'   // BD2
+  banco.mapa[2].sala_canon = '102'      // EST3: 1L1 continua pela porta
+  const { rest } = fakeRest(banco)
+  const titulos: string[] = []
+
+  await executar({
+    rest,
+    enviar: (_s, p: any) => {
+      titulos.push(p.title)
+      return Promise.resolve('enviado' as const)
+    },
+    slot: 'manha1',
+    iso: '2026-08-27',
+    diaSemana: 3,
+  })
+
+  assertEquals(titulos.sort(), ['Salas 2L1, P2-204', 'Salas P2-204, 102'])
+})
