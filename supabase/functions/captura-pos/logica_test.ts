@@ -30,6 +30,26 @@ Deno.test('a fonte real de 27/08 é lida inteira', () => {
   assertEquals(l.afeta_ocupacao, false)
 })
 
+// Topo e cabeçalho copiados da fonte de 06/10/2026, quando a terceira coluna
+// passou a se chamar TURMA. Professores trocados por nome fictício.
+const REAL_TURMA = `,MAPA DE SALAS,,,
+,,,,
+,,,,
+DATA: 06/10/2026 (Terça-Feira)      ,,,, 
+SALA,CURSO,TURMA,DISCIPLINA,PROFESSOR(A)
+2A3,LLM EM DIREITO EMPRESARIAL,20252A + 20252B + 20261A + 20261B + 20262A,Direito Societário e M&A,Fulano de Tal
+2L1,"MBA EM IA, DATA SCIENCE E BIG DATA",20252B + 20261A + 20261B + 20262A,Estatística aplicada a Data Science,Beltrano de Tal
+3L2,MBA EXECUTIVO,20252A + 20252B + 20261A + 20261B,Finanças Corporativas,Sicrano de Tal`
+
+Deno.test('terceira coluna com o nome TURMA é o mesmo formato (06/10)', () => {
+  const a = analisar(REAL_TURMA)
+  assert(a.estado === 'ok')
+  assertEquals(a.data_fonte, '2026-10-06')
+  assertEquals(a.linhas.map((l) => l.sala_canon), ['214', '217', '307'])
+  assertEquals(a.linhas[1].curso, 'MBA EM IA, DATA SCIENCE E BIG DATA')
+  assertEquals(a.linhas[1].coluna_c_raw, '20252B + 20261A + 20261B + 20262A')
+})
+
 Deno.test('a data sai da planilha, não do relógio do servidor', () => {
   assertEquals(lerData('DATA:25/08/2026(Terça-Feira)      '), '2026-08-25')
   assertEquals(lerData('DATA: 1/9/2026 (Terça)'), '2026-09-01')
