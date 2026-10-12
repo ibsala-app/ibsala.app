@@ -73,3 +73,16 @@ Deno.test('csv do Google: aspas, aspas dobradas, CRLF e BOM', () => {
 Deno.test('csv: última linha sem quebra não some', () => {
   assertEquals(lerCsv('a,b\nc,d'), [['a', 'b'], ['c', 'd']])
 })
+
+Deno.test('grafias da quarentena com número de porta explícito (12/10)', () => {
+  for (const [bruta, canon] of [
+    ['106 (prédio 2)', 'P2-106'], ['115 LAB ARQ', '115'], ['308 (TECH)', '308'],
+    ['101 (P2) LAB MATERIAIS DE CONSTRUÇÃO', 'P2-101'],
+    ['101 (P2) LAB.MATERIAS DE CONSTRUÇÃO', 'P2-101'],
+  ]) assertEquals(resolverSala(bruta, rep), [canon, 'apelido'])
+  for (const s of ['CANCELADO', 'SALA DE REUNIÃO 2']) {
+    assertEquals(resolverSala(s, rep), [null, 'ignorada'])
+  }
+  // Outros rótulos de reunião continuam exigindo revisão.
+  assertEquals(resolverSala('SALA DE REUNIÃO 1', rep), [null, 'desconhecida'])
+})

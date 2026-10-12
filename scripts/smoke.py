@@ -156,4 +156,5 @@ def main():
 
 
 if __name__ == '__main__':
+    subprocess.run(['node', '--test', os.path.join(RAIZ, 'scripts', 'rede.test.cjs')], check=True)
     main()

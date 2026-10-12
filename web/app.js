@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=61'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=62'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -131,6 +131,15 @@ async function procurarAtualizacao() {
 // bundle faltar, a navegação continua funcionando e o app diz o que aconteceu.
 const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { flowType: 'pkce' },
+}) ?? null
+
+// Mapa e catálogo são públicos. Uma sessão vencida ou recém-emitida não deve
+// impedir a consulta nem fazer a home esperar pelo refresh do login.
+const sbPublico = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    storageKey: 'ibsala-publico', persistSession: false,
+    autoRefreshToken: false, detectSessionInUrl: false,
+  },
 }) ?? null
 
 // ── Slots (portado do v1) ────────────────────────────────────────────────────
@@ -359,13 +368,18 @@ let posHoje = []
 // ficava em fantasma pra sempre: foi assim que, em aula do Osmar às 10:59, a
 // busca respondeu "sem aula hoje" pra uma aula que estava acontecendo. O teto
 // existia só no boot; as outras quinze chamadas do arquivo não tinham nenhum.
-const comTeto = (p, ms = 9000, aoEstourar) => Promise.race([
-  p,
-  new Promise((_, falha) => setTimeout(() => {
-    aoEstourar?.()
-    falha(new Error('tempo esgotado'))
-  }, ms)),
-])
+async function comTeto(p, ms = 9000, aoEstourar) {
+  let timer
+  try {
+    return await Promise.race([
+      p,
+      new Promise((_, falha) => { timer = setTimeout(() => {
+        aoEstourar?.()
+        falha(new Error('tempo esgotado'))
+      }, ms) }),
+    ])
+  } finally { clearTimeout(timer) }
+}
 
 // Erro do servidor vira frase que o aluno entende. Sem isto o app chamava tudo
 // de "você já tem essa matéria nesse dia", inclusive sessão expirada.
@@ -419,8 +433,10 @@ function reportarChamada(erro, cru, rota, ms) {
   })
 }
 
-async function chamar(q, ms = 9000, op) {
+async function chamar(q, ms = 9000, op, sinal) {
   const rota = nomeDaChamada(q, op)
+  const cancelado = () => ({ data: null, error: { tipo: 'cancelado' } })
+  if (sinal?.aborted) return cancelado()
   if (!sb) {
     const erro = { tipo: 'offline', msg: 'O app não carregou por completo.' }
     reportarChamada(erro, null, rota, ms)
@@ -432,10 +448,14 @@ async function chamar(q, ms = 9000, op) {
   // que é exatamente o caso do cadastro de matéria em rede de celular.
   // Cada tentativa tem o próprio controlador: o builder do PostgREST dispara um
   // fetch novo a cada `then`, e o abort da primeira não pode matar a segunda.
-  const umaVez = () => {
+  const umaVez = async () => {
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+    const abortar = () => ctrl?.abort()
+    sinal?.addEventListener('abort', abortar, { once: true })
+    if (sinal?.aborted) abortar()
     if (ctrl && typeof q?.abortSignal === 'function') q = q.abortSignal(ctrl.signal)
-    return comTeto(Promise.resolve(q), ms, () => ctrl?.abort())
+    try { return await comTeto(Promise.resolve(q), ms, abortar) }
+    finally { sinal?.removeEventListener('abort', abortar) }
   }
   // Só leitura repete, e só depois de ESTOURO do teto. O iPhone pendura a
   // primeira requisição quando a aba volta do segundo plano e a seguinte passa
@@ -450,6 +470,7 @@ async function chamar(q, ms = 9000, op) {
     try {
       r = await umaVez()
     } catch (e) {
+      if (sinal?.aborted) return cancelado()
       if (!leitura) throw e
       rastro('rede', 'leitura repetida', { rota, motivo: String(e?.message ?? e) }, 'warning')
       r = await umaVez()
@@ -458,15 +479,19 @@ async function chamar(q, ms = 9000, op) {
     // do gateway (IBSALA-18, 1 s depois do boot). É recusa na porta, antes de o
     // banco executar qualquer coisa, então repetir vale até pra escrita. O
     // mesmo código cobre token VENCIDO, que esperar não cura: esse não repete.
+    if (sinal?.aborted) return cancelado()
     if (r?.error?.code === 'PGRST303' && /future/i.test(r.error.message ?? '')) {
       await new Promise((ok) => setTimeout(ok, 1500))
+      if (sinal?.aborted) return cancelado()
       r = await umaVez()
     }
   } catch (e) {
+    if (sinal?.aborted) return cancelado()
     const erro = { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' }
     reportarChamada(erro, e, rota, ms)
     return { data: null, error: erro }
   }
+  if (sinal?.aborted) return cancelado()
   if (r?.error) {
     // o status HTTP mora em `r.status`, fora do objeto de erro: sem juntar os
     // dois, sessão vencida sem código caía em "Sem resposta do servidor"
@@ -497,6 +522,7 @@ async function ocupado(btn, tarefa) {
 // "Tentar de novo", a tela pintava certo, e 9s depois a chamada velha estourava
 // o teto e chamava falhaNoMapa(), apagando a tela boa.
 let seqAgora = 0
+let ctrlAgora = null
 
 // Uma resposta no lugar de quatro.
 //
@@ -517,9 +543,9 @@ let seqAgora = 0
 // desvio a pós sumia da tela pelo resto da sessão.
 let marcaEstado = null
 
-async function estadoPublico() {
-  const r = await sb.rpc('estado_publico', { marca: marcaEstado })
-  if (r.error) throw r.error
+async function estadoPublico(sinal) {
+  const r = await sbPublico.rpc('estado_publico', { marca: marcaEstado }).abortSignal(sinal)
+  if (r.error) throw { ...r.error, status: r.status }
   const d = r.data ?? {}
   // nada mudou desde a última carga: o mapa e as salas que já estão na memória
   // seguem valendo, e vieram só config e total
@@ -540,10 +566,21 @@ async function carregarAgora({ ghost = false } = {}) {
     ghostLinhas($('board-agora'))
   }
   const meu = ++seqAgora
+  ctrlAgora?.abort()
+  const ctrl = new AbortController()
+  ctrlAgora = ctrl
+  const tentativa = async (ms) => {
+    const pedido = new AbortController()
+    const abortar = () => pedido.abort()
+    ctrl.signal.addEventListener('abort', abortar, { once: true })
+    if (ctrl.signal.aborted) abortar()
+    try { return await comTeto(estadoPublico(pedido.signal), ms, abortar) }
+    finally { ctrl.signal.removeEventListener('abort', abortar) }
+  }
   let est
   try {
     try {
-      est = await comTeto(estadoPublico())
+      est = await tentativa(9000)
     } catch (e) {
       // Erro com código é o servidor respondendo não, e repetir não muda nada.
       // Sem código é rede: teto estourado ou `Failed to fetch`, que no celular
@@ -551,12 +588,15 @@ async function carregarAgora({ ghost = false } = {}) {
       // A RPC é POST, então o retry nativo do supabase-js (só GET) não cobre.
       // A segunda tem teto menor: rede boa responde em menos de 1 s, e rede
       // que pendura não merece 18 s de esqueleto pra admitir a falha
+      if (ctrl.signal.aborted || meu !== seqAgora) return false
       if (e?.code) throw e
       rastro('rede', 'mapa repetido', { motivo: String(e?.message ?? e) }, 'warning')
-      est = await comTeto(estadoPublico(), 5000)
+      est = await tentativa(5000)
     }
   } catch (e) {
+    if (ctrl.signal.aborted || meu !== seqAgora) return false
     reportar(e, {
+      extra: { codigo: e?.code, mensagem: e?.message, status: e?.status },
       msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
       nivel: e?.message === 'tempo esgotado' ? 'warning' : 'error',
       chave: `mapa|${e?.code ?? e?.message ?? 'erro'}`,
@@ -1017,6 +1057,8 @@ for (const tela of Object.values(BUSCAS)) {
   let timer
   on(tela.input, 'input', (e) => {
     clearTimeout(timer)
+    ++tela.seq
+    tela.ctrl?.abort()
     const termo = e.target.value.trim()
     timer = setTimeout(() => buscar(termo, tela), 300)
   })
@@ -1034,6 +1076,10 @@ const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_c
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
 async function buscar(termo, tela) {
+  const meu = ++tela.seq
+  tela.ctrl?.abort()
+  const ctrl = new AbortController()
+  tela.ctrl = ctrl
   const lista = $(tela.lista)
   $(tela.falha).hidden = true
   if (termo.length < 2) {
@@ -1053,7 +1099,6 @@ async function buscar(termo, tela) {
     return
   }
   ghostLinhas(lista, 4)
-  const meu = ++tela.seq
   await pronto            // sem isto a primeira busca da sessão marca tudo "sem aula hoje"
   if (meu !== tela.seq) return
 
@@ -1077,10 +1122,10 @@ async function buscar(termo, tela) {
   // parêntese digitados na busca mudavam a expressão do filtro (o mínimo era
   // erro 400 em quem buscasse "PA: INTRO, DIREITO"). Valor entre aspas resolve.
   const t = aspasPostgrest(`%${termo}%`)
-  const { data, error } = await chamar(sb.from('disciplinas_historico')
+  const { data, error } = await chamar(sbPublico.from('disciplinas_historico')
     .select('codigo,turma,disciplina,professor')
     .or(`disciplina.ilike.${t},professor.ilike.${t},codigo.ilike.${t}`)
-    .limit(30))
+    .limit(30), 9000, undefined, ctrl.signal)
   if (meu !== tela.seq) return
   // o `return` seco deixava os quatro esqueletos pulsando pra sempre e o toast
   // sumia em 3,2s: o aluno ficava olhando um fantasma sem explicação nenhuma
