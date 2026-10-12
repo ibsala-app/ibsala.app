@@ -39,8 +39,11 @@ export function hojeBRT() {
   const dias = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
   const curto = new Intl.DateTimeFormat('en-US', { weekday: 'short', ...tz })
     .format(agora).toLowerCase().slice(0, 3)
+  const [hh, mm] = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, ...tz })
+    .format(agora).split(':').map(Number)
   return {
     iso: agora.toLocaleDateString('sv-SE', tz),
     diaSemana: dias.indexOf(curto),      // 1=SEG … 6=SAB (materias.dia)
+    minutos: (hh % 24) * 60 + mm,        // desde a meia-noite, pro TTL do aviso
   }
 }

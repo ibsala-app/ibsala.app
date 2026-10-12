@@ -9,7 +9,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { enviar } from '../_shared/webpush.ts'
-import { avisar, servir } from '../_shared/sentry.ts'
+import { avisar, reportar, servir } from '../_shared/sentry.ts'
 
 // mesma allowlist do apagar-conta: com `*`, qualquer página que tivesse
 // conseguido um token do aluno podia gastá-lo aqui
@@ -45,8 +45,13 @@ servir('push-teste', async (req) => {
 
   // o filtro por aluno é o que impede esta function de virar um megafone: a
   // service key ignora RLS, então o dono do push é decidido aqui, pelo JWT
-  const { data: subs } = await admin.from('push_subscriptions')
+  const { data: subs, error: erroSubs } = await admin.from('push_subscriptions')
     .select('endpoint,p256dh,auth').eq('aluno_id', data.user.id)
+  // sem isto, banco fora do ar virava "este aparelho não está inscrito"
+  if (erroSubs) {
+    reportar(new Error(`push-teste: leitura das inscrições: ${erroSubs.message}`))
+    return Response.json({ erro: 'leitura' }, { status: 500, headers: CORS })
+  }
 
   if (!subs?.length) {
     return Response.json({ enviados: 0, motivo: 'sem inscricao' }, { headers: CORS })
@@ -66,8 +71,10 @@ servir('push-teste', async (req) => {
     } else if (r === 'morta') {
       // a inscrição morreu no push service: apagar aqui é o que faz o
       // interruptor da tela de Ajustes parar de mentir na próxima carga
-      await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
-      limpas++
+      const { error: erroDel } = await admin.from('push_subscriptions')
+        .delete().eq('endpoint', s.endpoint)
+      if (erroDel) reportar(new Error(`push-teste: limpeza de inscrição: ${erroDel.message}`))
+      else limpas++
     } else {
       falhas++
     }

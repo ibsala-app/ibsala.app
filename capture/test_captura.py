@@ -68,6 +68,20 @@ GRAD,MONITORIA - CÁLCULO,THIAGO,11:40/12:40,106,SEXTA,11/set.,
     assert linhas[0]["categoria"] == "OUTRAS RESERVAS"
 
 
+def test_cabecalho_de_coluna_em_caixa_alta_nao_esvazia_a_captura():
+    csv = """GRADUAÇÃO - MANHÃ,,,,,,,
+TURMA,DISCIPLINA,PROFESSOR(A), Horários ,SALA,Dia,DATA,Observações
+3ADM,IBM0022-8001/ JURISDICAO,FULANO,07:30/09:20,2L1,SEXTA,11/set.,
+"""
+    linhas = parsear(csv)
+    assert len(linhas) == 1
+    assert linhas[0]["turma"] == "3ADM"
+    assert linhas[0]["codigo"] == "IBM0022-8001"
+    assert linhas[0]["professor"] == "FULANO"
+    assert linhas[0]["horario"] == "07:30/09:20"
+    assert linhas[0]["sala"] == "2L1"
+
+
 def test_ferias_sem_lixo():
     # títulos de seção perdidos (inclusive o typo "GRADUÇÃO - SÁBADO" da
     # planilha real) não viram linha do mapa

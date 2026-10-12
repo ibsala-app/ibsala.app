@@ -10,6 +10,8 @@
 -- 15:50, 17:40, 18:40 e 22:30. Os minutos 0, 20 e 40 ficam de fora porque a
 -- 0008 já dispara neles, e duas capturas no mesmo minuto só disputariam o
 -- mesmo upsert. São 95 execuções extras por dia útil, longe do teto do plano.
+-- Exceção: às 22h a 0008 só dispara em 22:00, então a janela das 22:30 cobre
+-- de 22:22 a 22:38, sem as pontas de 22:20 e 22:40.
 --
 -- Horários em UTC (BRT+3). O de 01h UTC é 22:30 BRT do dia anterior, por
 -- isso roda de terça a sábado, igual ao `captura-noite` da 0008.

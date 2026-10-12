@@ -40,8 +40,14 @@ servir('push-slot', async (req) => {
   const { slot } = await req.json().catch(() => ({}))
   if (!SLOTS[slot]) return new Response('slot inválido', { status: 400 })
 
-  const { iso, diaSemana } = hojeBRT()
-  const saida = await executar({ rest, enviar, slot, iso, diaSemana })
+  const { iso, diaSemana, minutos } = hojeBRT()
+  const saida = await executar({ rest, enviar, slot, iso, diaSemana, agoraMin: minutos })
+  // O cron só roda em dia útil, então slot sem aula nenhuma no mapa é captura
+  // parada ou cabeçalho trocado (05/10: `Horários`), não dia vazio. Em feriado
+  // isto avisa à toa, uma issue só, que é o preço de não descobrir pelo aluno.
+  if (saida.motivo === 'mapa vazio no slot') {
+    avisar(`push-slot ${slot}: mapa vazio no slot`, 'warning', { slot, iso })
+  }
   if (saida.falhas) {
     avisar(`push-slot ${slot}: ${saida.falhas} envio(s) falharam`, 'warning', { slot, ...saida })
   }

@@ -1,6 +1,6 @@
 # ibsala v5
 
-Sistema de salas do Ibmec BH. Reescrita serverless do [app-salas] (v5), projetada pra
+Sistema de salas do Ibmec BH. Reescrita serverless do app-salas (v5), projetada pra
 custo zero e manutenção zero ("always free, set it and forget it").
 
 ## Stack
@@ -22,10 +22,10 @@ supabase/
   migrations/   # schema SQL versionado (fonte da verdade do banco)
   functions/    # edge functions (push, jobs)
 web/            # PWA estática (deploy: Cloudflare Pages)
-capture/        # scraper do mapa de salas (roda no GitHub Actions)
+capture/        # captura em Python: plano B manual (workflow_dispatch) e paridade no CI
 docs/           # arquitetura e runbooks
 .github/
-  workflows/    # cron da captura + CI
+  workflows/    # CI + captura manual de emergência
 ```
 
 ## Decisões (2026-07-23)

@@ -22,6 +22,7 @@ import { segredoConfere } from '../_shared/cron.ts'
 import { carregarRepertorio, type Repertorio } from '../_shared/repertorio.ts'
 import { anotarCanonicas, parsear } from './logica.ts'
 import { avisar, servir } from '../_shared/sentry.ts'
+import { hojeBRT } from '../_shared/slots.ts'
 import { buscar } from '../_shared/retentar.ts'
 
 const URL_BASE = Deno.env.get('SUPABASE_URL')!
@@ -132,6 +133,30 @@ async function enviar(linhas: any[], rep: Repertorio, pendentes: Record<string, 
 
 /** Marca de frescor lida pelo front. net.http_post do pg_cron é fire and
  *  forget: sem isto, agendador parado é invisível. */
+const TETO_MS = 20_000
+/** Quantos dias sem captura boa ainda contam como "estava funcionando". Passou
+ *  disso é férias, e avisar a cada rodada só gastaria a cota do Sentry. */
+const DIAS_DE_SUSPEITA = 3
+
+/** Planilha vazia merece aviso? Dia útil, das 5h às 22h de Brasília, e a última
+ *  captura boa é recente. Se nem a marca der pra ler, avisa: é o lado seguro. */
+async function vazioSuspeito(): Promise<boolean> {
+  const { diaSemana } = hojeBRT()
+  // Brasília é UTC-3 fixo desde o fim do horário de verão, em 2019
+  const hora = new Date(Date.now() - 3 * 60 * 60 * 1000).getUTCHours()
+  if (diaSemana < 1 || diaSemana > 5 || hora < 5 || hora >= 22) return false
+  try {
+    const r = await buscar(`${URL_BASE}/rest/v1/config?key=eq.ultima_captura&select=value`, {
+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+    })
+    if (!r.ok) return true
+    const em = Date.parse((await r.json())?.[0]?.value?.em ?? '')
+    return !em || Date.now() - em < DIAS_DE_SUSPEITA * 24 * 60 * 60 * 1000
+  } catch {
+    return true
+  }
+}
+
 async function marcarFrescor(resumo: unknown) {
   await post('config', [{ key: 'ultima_captura', value: resumo }], 'key', 'merge-duplicates')
 }
@@ -150,14 +175,24 @@ servir('captura', async (req) => {
   }
 
   const texto = corpo.csv ?? await (async () => {
-    const r = await fetch(EXPORT_URL, { headers: { 'User-Agent': 'ibsala-captura/2.0' } })
+    // sem teto, Google pendurado empilhava execuções nas viradas (disparo de 2
+    // em 2 minutos) até o runtime matar; a captura da pós já tinha
+    const r = await fetch(EXPORT_URL, {
+      headers: { 'User-Agent': 'ibsala-captura/2.0' },
+      signal: AbortSignal.timeout(TETO_MS),
+    })
     if (!r.ok) throw new Error(`planilha: ${r.status}`)
     return r.text()
   })()
 
   const linhas = parsear(texto)
   if (!linhas.length) {
-    // estado legítimo em férias e fim de semana: a planilha da fonte fica vazia
+    // estado legítimo em férias e fim de semana: a planilha da fonte fica vazia.
+    // Em dia útil, com captura boa nos últimos dias, é o parser que parou de
+    // reconhecer a planilha, e o único sinal era a pill de frescor parada
+    if (!corpo.dry && await vazioSuspeito()) {
+      avisar('captura: planilha sem aula em dia letivo', 'warning', { bytes: texto.length })
+    }
     return Response.json({ linhas: 0, motivo: 'planilha vazia' })
   }
 

@@ -27,12 +27,19 @@ REPERTORIO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 SPREADSHEET_ID = "1-TyWurlvjDaiGwRmNFlq3OyK8ia4UP3fPpiSxyL2d3Y"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
 
-TITULOS_CATEGORIA = [
-    "GRADUAÇÃO - MANHÃ",
-    "GRADUAÇÃO - TARDE",
-    "GRADUAÇÃO - NOITE",
-    "OUTRAS RESERVAS - NOITE",
-]
+# Nome canônico de cada coluna que o parser lê, pela chave (ver `_chave`). Mesma
+# tabela de `supabase/functions/captura/logica.ts`: cabeçalho em caixa alta ou
+# com espaço sobrando não pode esvaziar a captura.
+COLUNAS_POR_CHAVE = {
+    "TURMA": "Turma",
+    "DISCIPLINA": "Disciplina",
+    "PROFESSOR": "Professor",
+    "PROFESSOR A": "Professor",
+    "HORARIO": "Horario",
+    "HORARIOS": "Horarios",
+    "SALAS": "Salas",
+    "SALA": "Sala",
+}
 
 # A coordenação edita os títulos direto na planilha. Em 11/09/2026,
 # "GRADUAÇÃO - MANHÃ" virou "GRADUAÇÃO - Manhã" e a comparação literal
@@ -212,8 +219,9 @@ def parsear(texto_csv):
             colunas = None
             continue
 
-        if col0 == "Turma" and categoria:
-            colunas = [_sem_acento(v) if v.strip() else f"col{i}" for i, v in enumerate(valores)]
+        if _chave(col0) == "TURMA" and categoria:
+            colunas = [(COLUNAS_POR_CHAVE.get(_chave(v)) or _sem_acento(v)) if v.strip() else f"col{i}"
+                       for i, v in enumerate(valores)]
             continue
 
         if categoria and colunas and col0 and col0 != "nan":
@@ -241,7 +249,7 @@ def parsear(texto_csv):
     for reg in registros:
         # linha sem disciplina e sem horário não é aula (títulos perdidos,
         # subtotais); a fonte tem seções de sábado com typo fora de
-        # TITULOS_CATEGORIA que vazam pra cá
+        # CATEGORIAS_POR_CHAVE que vazam pra cá
         if not reg.get("Disciplina", "").strip() and not reg.get("Horario", "").strip():
             continue
         codigo, disciplina = _extrair_codigo(reg.get("Disciplina", ""))
@@ -350,6 +358,11 @@ def main():
         por_cat[l["categoria"]] = por_cat.get(l["categoria"], 0) + 1
     print(f"{len(linhas)} linhas: " + ", ".join(f"{c}={n}" for c, n in por_cat.items()))
 
+    # mesma guarda da function: cabeçalho inesperado deixa toda aula sem
+    # horário, e o upsert apagaria o mapa bom
+    if any(l["codigo"] for l in linhas) and not any(l["codigo"] and l["horario"] for l in linhas):
+        raise SystemExit("captura: aulas sem horário; conferir cabeçalho da planilha")
+
     rep = carregar_repertorio()
     pendentes, multiplas = anotar_canonicas(linhas, rep)
     ocupando = sum(1 for l in linhas if l["sala_canon"])
@@ -358,11 +371,20 @@ def main():
     if pendentes:
         print("quarentena: " + ", ".join(f"{a!r}x{n}" for a, n in pendentes.items()))
     if multiplas:
-        print("barra com dois lados válidos (nenhuma sala ocupada, decisão pendente): "
+        print("barra com dois lados válidos (o site e o aviso usam os dois): "
               + ", ".join(f"{a!r} -> {'+'.join(c)}" for a, c in multiplas.items()))
 
     if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
-        enviar(linhas, rep, pendentes)
+        escrita = enviar(linhas, rep, pendentes)
+        # a function grava esta marca e o app mostra o frescor por ela: sem isto,
+        # rodar o plano B deixava a pill parada com o mapa atualizado
+        _post(os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/config",
+              os.environ["SUPABASE_SERVICE_KEY"],
+              [{"key": "ultima_captura", "value": {
+                  "em": datetime.now(timezone.utc).isoformat(),
+                  "linhas": len(linhas), "ocupando": ocupando,
+                  "quarentena": len(pendentes), **escrita}}],
+              "key", "merge-duplicates")
         print("upsert ok")
     else:
         print("dry-run (sem SUPABASE_URL/SUPABASE_SERVICE_KEY)")

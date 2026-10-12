@@ -12,8 +12,11 @@ import {
   executar,
   maisRecentePorCodigo,
   paginar,
+  salasDaAula,
   todasAsSubs,
+  ttlDoAviso,
 } from './logica.ts'
+import { carregarRepertorio } from '../_shared/repertorio.ts'
 
 type Linha = Record<string, any>
 
@@ -263,4 +266,62 @@ Deno.test('laboratório sai no título pelo código da placa, não pela porta', 
   })
 
   assertEquals(titulos.sort(), ['Salas 2L1, P2-204', 'Salas P2-204, 102'])
+})
+
+Deno.test('aula em par de salas avisa com as duas, e pseudo-sala continua de fora', async () => {
+  const banco = bancoGrande(3, 1, 1)                    // aluno 0 ARQ1, 1 BD2, 2 EST3
+  Object.assign(banco.mapa[0], { sala: '302/303', sala_canon: null })
+  Object.assign(banco.mapa[1], { sala: '2L1/2L2', sala_canon: null })
+  Object.assign(banco.mapa[2], { sala: 'CANCELADA', sala_canon: null })
+  const { rest } = fakeRest(banco)
+  const titulos: string[] = []
+
+  const saida = await executar({
+    rest,
+    enviar: (_s, p: any) => {
+      titulos.push(p.title)
+      return Promise.resolve('enviado' as const)
+    },
+    slot: 'manha1',
+    iso: '2026-08-27',
+    diaSemana: 3,
+  })
+
+  assertEquals(titulos.sort(), ['Salas 2L1, 2L2', 'Salas 302, 303'])
+  assertEquals(saida.alunos, 2)
+})
+
+Deno.test('lado que não é sala não entra, e par sem sala nenhuma não avisa', () => {
+  const rep = carregarRepertorio()
+  assertEquals(salasDaAula({ sala: '302/AUDITORIO QUALQUER', sala_canon: null }, rep), ['302'])
+  assertEquals(salasDaAula({ sala: 'FOYER/PATIO', sala_canon: null }, rep), [])
+  assertEquals(salasDaAula({ sala: 'ONLINE', sala_canon: null }, rep), [])
+  assertEquals(salasDaAula({ sala: '2L1', sala_canon: '217' }, rep), ['217'])
+})
+
+Deno.test('validade do aviso vai até o início da aula mais tardia, com folga', async () => {
+  // disparo do tarde1 às 12:10 pra aula das 13:30: 80 min + 15 de folga
+  assertEquals(ttlDoAviso([{ horario: '13:30/15:20' }], 12 * 60 + 10), 95 * 60)
+  // duas aulas no slot: vale a que começa depois
+  assertEquals(
+    ttlDoAviso([{ horario: '07:30/09:20' }, { horario: '09:20/11:00' }], 6 * 60 + 40), 175 * 60)
+  assertEquals(ttlDoAviso([{ horario: '' }], 600), undefined)
+  assertEquals(ttlDoAviso([{ horario: '13:30/15:20' }], undefined), undefined)
+
+  const banco = bancoGrande(1, 1, 1)
+  banco.mapa[0].horario = '18:40/22:30'
+  const { rest } = fakeRest(banco)
+  const ttls: (number | undefined)[] = []
+  await executar({
+    rest,
+    enviar: (_s, _p, ttl) => {
+      ttls.push(ttl)
+      return Promise.resolve('enviado' as const)
+    },
+    slot: 'noite1',
+    iso: '2026-08-27',
+    diaSemana: 3,
+    agoraMin: 17 * 60 + 10,
+  })
+  assertEquals(ttls, [105 * 60])
 })

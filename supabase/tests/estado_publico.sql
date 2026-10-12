@@ -91,7 +91,7 @@ begin
 end;
 $$;
 
--- linha APAGADA também: é o fantasma de 12/08, que não mexe em max(capturado)
+-- linha APAGADA também: é o fantasma de 12/08
 do $$
 declare
   m text := (select public.estado_publico() ->> 'marca');
@@ -101,6 +101,36 @@ begin
     'aula APAGADA do mapa também muda a marca');
 end;
 $$;
+
+-- captura que regrava a MESMA planilha não muda nada pro app: só `capturado`
+-- anda. Era o defeito da 0025: marca por max(capturado) mudava a cada rodada
+do $$
+declare
+  m text := (select public.estado_publico() ->> 'marca');
+begin
+  update public.mapa_dia set capturado = now() + interval '20 minutes' where data = current_date;
+  perform testes.ok((select public.estado_publico(m) ->> 'mudou') = 'false',
+    'captura sem mudança na planilha NÃO muda a marca');
+end;
+$$;
+
+-- e a troca de sala, que é o que o aluno precisa ver na hora, muda
+do $$
+declare
+  m text := (select public.estado_publico() ->> 'marca');
+begin
+  update public.mapa_dia set sala = '106', sala_canon = 'P1-106' where codigo = 'BD2';
+  perform testes.ok((select public.estado_publico(m) ->> 'mudou') = 'true',
+    'troca de sala muda a marca');
+end;
+$$;
+
+select testes.ok(
+  not exists (
+    select 1 from jsonb_array_elements(
+      testes.como_anon($$select public.estado_publico()$$) -> 'config') c
+     where c ->> 'key' not in ('travado', 'ultima_captura')),
+  'config pública só leva o que o app lê');
 
 -- repertório de salas entra na marca
 do $$

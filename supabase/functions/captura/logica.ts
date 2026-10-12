@@ -10,12 +10,21 @@
 import { lerCsv } from '../_shared/csv.ts'
 import { chave, ladosDaBarra, type Repertorio, resolverSala, semAcento } from '../_shared/repertorio.ts'
 
-export const TITULOS_CATEGORIA = [
-  'GRADUAÇÃO - MANHÃ',
-  'GRADUAÇÃO - TARDE',
-  'GRADUAÇÃO - NOITE',
-  'OUTRAS RESERVAS - NOITE',
-]
+// O cabeçalho das colunas tem o mesmo dono e o mesmo risco dos títulos de
+// categoria: a linha era reconhecida por `col0 === 'Turma'` literal, e as
+// colunas eram lidas pelo nome exato. `TURMA` ou `Salas ` faria a captura
+// responder "planilha vazia" de 2 em 2 minutos com o mapa do dia congelado.
+// Cada coluna que o parser lê ganha nome canônico pela chave.
+const COLUNAS_POR_CHAVE: Record<string, string> = {
+  TURMA: 'Turma',
+  DISCIPLINA: 'Disciplina',
+  PROFESSOR: 'Professor',
+  'PROFESSOR A': 'Professor',
+  HORARIO: 'Horario',
+  HORARIOS: 'Horarios',
+  SALAS: 'Salas',
+  SALA: 'Sala',
+}
 
 // A coordenação edita estes títulos direto na planilha. Em 11/09/2026,
 // "GRADUAÇÃO - MANHÃ" virou "GRADUAÇÃO - Manhã" e a comparação literal
@@ -80,8 +89,8 @@ export function parsear(textoCsv: string, hoje = hojeISO()): any[] {
       colunas = null
       continue
     }
-    if (col0 === 'Turma' && categoria) {
-      colunas = valores.map((v, i) => (v.trim() ? semAcento(v) : `col${i}`))
+    if (chave(col0) === 'TURMA' && categoria) {
+      colunas = valores.map((v, i) => (v.trim() ? (COLUNAS_POR_CHAVE[chave(v)] ?? semAcento(v)) : `col${i}`))
       continue
     }
     if (categoria && colunas && col0 && col0 !== 'nan') {
