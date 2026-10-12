@@ -16,7 +16,7 @@
 // `config.ultima_captura_pos`. Fonte estranha não apaga nada.
 
 import { segredoConfere } from '../_shared/cron.ts'
-import { analisar } from './logica.ts'
+import { analisar, salasPendentes } from './logica.ts'
 import { avisar, reportar, servir } from '../_shared/sentry.ts'
 import { buscar } from '../_shared/retentar.ts'
 
@@ -126,12 +126,14 @@ servir('captura-pos', async (req) => {
     }),
   })
 
+  const pendentes = salasPendentes(analise.linhas)
   const resumo = {
     estado: 'ok',
     data_fonte: analise.data_fonte,
     linhas: analise.linhas.length,
     remotas: analise.linhas.filter((l) => l.modalidade === 'remoto').length,
-    sem_sala_canonica: analise.linhas.filter((l) => !l.sala_canon).length,
+    sem_sala_canonica: Object.values(pendentes).reduce((a, b) => a + b, 0),
+    pendentes,
     batch,
     ...(escrita ?? {}),
   }

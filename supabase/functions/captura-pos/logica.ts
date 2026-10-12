@@ -113,3 +113,25 @@ export function analisar(textoCsv: string, rep: Repertorio = carregarRepertorio(
 
   return { estado: 'ok', data_fonte: data, linhas: saida }
 }
+
+/** Só rótulos não resolvidos precisam de revisão. Remoto e pares de salas
+ * conhecidas têm canônica nula por contrato, sem erro na captura. */
+export function salasPendentes(linhas: LinhaPos[], rep: Repertorio = carregarRepertorio()) {
+  const pendentes: Record<string, number> = {}
+  for (const l of linhas) {
+    if (rep.ignoradas.has(chave(l.sala_raw))) continue
+    const partes = l.sala_raw.split('/')
+    const desconhecida = partes.some((p) => {
+      const [, motivo] = resolverSala(p, rep)
+      return motivo === 'desconhecida' || motivo === 'vazia'
+    })
+    // Apelidos com barra (114 LAB QUIMICA/FISICA) são uma sala só.
+    const [canon] = resolverSala(l.sala_raw, rep)
+    if (canon && partes.length === 1) continue
+    if (canon && rep.apelidos.has(chave(l.sala_raw))) continue
+    if (!desconhecida) continue
+    const rotulo = l.sala_raw || '(sem sala)'
+    pendentes[rotulo] = (pendentes[rotulo] ?? 0) + 1
+  }
+  return pendentes
+}
