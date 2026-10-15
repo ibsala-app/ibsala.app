@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=62'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=63'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -320,6 +320,8 @@ function mostrar(tela, { push = true } = {}) {
   if (!TELAS.includes(tela)) tela = 'home'
   if (TELAS_LOGADO.includes(tela) && !perfil) tela = 'conta'
   if (tela === 'admin' && perfil?.role !== 'admin') tela = 'conta'
+  const mudou = tela !== telaAtual
+  if (mudou && BUSCAS[telaAtual]) cancelarBusca(BUSCAS[telaAtual])
   document.querySelectorAll('.tela').forEach((x) => x.classList.remove('ativa'))
   const secao = $(`tela-${tela}`)
   secao.classList.add('ativa')
@@ -331,6 +333,7 @@ function mostrar(tela, { push = true } = {}) {
   // foco vai pro cabeçalho da tela nova, senão ele fica no botão que acabou de
   // virar display:none e o teclado perde o lugar
   secao.querySelector('[data-cabeca]')?.focus({ preventScroll: true })
+  if (mudou && BUSCAS[tela]) buscar($(BUSCAS[tela].input).value.trim(), BUSCAS[tela])
 }
 
 document.querySelectorAll('[data-vai]').forEach((b) => {
@@ -1053,14 +1056,19 @@ const BUSCAS = {
   },
 }
 
+// Cancelar também o debounce: sair antes dos 300 ms não deve iniciar uma
+// consulta numa tela escondida. A sequência impede a resposta antiga de pintar.
+function cancelarBusca(tela) {
+  clearTimeout(tela.timer)
+  ++tela.seq
+  tela.ctrl?.abort()
+}
+
 for (const tela of Object.values(BUSCAS)) {
-  let timer
   on(tela.input, 'input', (e) => {
-    clearTimeout(timer)
-    ++tela.seq
-    tela.ctrl?.abort()
+    cancelarBusca(tela)
     const termo = e.target.value.trim()
-    timer = setTimeout(() => buscar(termo, tela), 300)
+    tela.timer = setTimeout(() => buscar(termo, tela), 300)
   })
   on(tela.retry, 'click', (e) =>
     ocupado(e.currentTarget, () => buscar($(tela.input).value.trim(), tela)))
@@ -1076,8 +1084,8 @@ const bate = (r, alvo) => [r.disciplina, r.professor, r.codigo, r.sala, r.sala_c
 const aspasPostgrest = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
 async function buscar(termo, tela) {
-  const meu = ++tela.seq
-  tela.ctrl?.abort()
+  cancelarBusca(tela)
+  const meu = tela.seq
   const ctrl = new AbortController()
   tela.ctrl = ctrl
   const lista = $(tela.lista)

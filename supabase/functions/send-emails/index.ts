@@ -36,7 +36,7 @@ async function rest(path: string, init: RequestInit = {}) {
       'Content-Type': 'application/json',
       ...init.headers,
     },
-  })
+  }, { leitura: path === 'rpc/emails_enviados_24h' })
   if (!r.ok) throw new Error(`${path}: ${r.status}`)
   // upsert sem `return=representation` responde 201 com corpo VAZIO, e o
   // `r.json()` lançava depois da escrita já feita. O `.catch(() => {})` da marca

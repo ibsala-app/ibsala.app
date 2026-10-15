@@ -1,15 +1,6 @@
-// `fetch` pro PostgREST que não desiste no primeiro 401.
-//
-// Em 06/10/2026 o gateway do Supabase recusou a SERVICE_KEY duas vezes numa
-// manhã: `captura-pos` às 06:00 (IBSALA-15) e `push-slot` às 06:40 (IBSALA-16).
-// A chave estava certa: no mesmo segundo das 06:40 o `send-emails` passou com
-// ela, e 80 leituras seguidas depois deram 80 vezes 200. Como o 401 caiu na
-// primeira leitura do push-slot, a function morreu com 500 e o slot inteiro
-// ficou sem aviso, porque o pg_cron não repete.
-//
-// Só 401 entra aqui. Ele é recusa na porta, antes de o banco executar qualquer
-// coisa, então repetir vale pra GET, POST e DELETE sem risco de escrita em
-// dobro. 5xx não tem essa garantia e continua subindo como erro.
+// Repetição limitada das consultas ao PostgREST. 401 é recusa antes da
+// execução e pode repetir qualquer método. Rede e 5xx só repetem leituras:
+// uma escrita pode ter sido aplicada antes de a resposta se perder.
 
 /** Pausas entre as tentativas. Quatro tentativas em até 7,5 s: o pg_cron já não
  *  espera a resposta (net.http_post é fire and forget), então o custo é só o
@@ -25,12 +16,24 @@ export async function buscar(
     fetch?: typeof fetch
     dormir?: (ms: number) => Promise<void>
     esperas?: number[]
+    /** RPC POST que apenas consulta dados; nunca marcar claim ou envio. */
+    leitura?: boolean
   } = {},
 ): Promise<Response> {
   const { fetch: f = fetch, dormir = dormirDeVerdade, esperas = ESPERAS_MS } = dep
+  const leitura = dep.leitura === true || ['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase())
   for (let i = 0; ; i++) {
-    const r = await f(url, init)
-    if (r.status !== 401 || i >= esperas.length) return r
+    let r: Response
+    try {
+      r = await f(url, init)
+    } catch (e) {
+      if (!leitura || init.signal?.aborted || i >= esperas.length) throw e
+      await dormir(esperas[i])
+      if (init.signal?.aborted) throw e
+      continue
+    }
+    const transitorio = r.status === 401 || (leitura && r.status >= 500 && r.status <= 599)
+    if (!transitorio || init.signal?.aborted || i >= esperas.length) return r
     // corpo não lido segura a conexão aberta no runtime
     await r.body?.cancel()
     await dormir(esperas[i])
