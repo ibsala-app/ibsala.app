@@ -188,9 +188,13 @@ export async function executar(dep: {
   // não ocupar nada, chegava no aluno como "Sala CANCELADA".
   const mapa = await paginar(rest, `mapa_dia?data=eq.${iso}` +
     `&select=id,codigo,disciplina,horario,professor,sala,sala_canon,capturado`)
+  if (!mapa.length) return { ...vazio, motivo: 'mapa vazio' }
+  if (!mapa.some((r) => faixaHoraria(r.horario))) {
+    return { ...vazio, motivo: 'mapa sem horários válidos' }
+  }
   const doSlot = mapa.filter((r) =>
     r.codigo && salasDaAula(r, rep).length && slotDoInicio(r.horario) === slot)
-  if (!doSlot.length) return { ...vazio, motivo: 'mapa vazio no slot' }
+  if (!doSlot.length) return { ...vazio, motivo: 'sem aulas no slot' }
   const porCodigo = maisRecentePorCodigo(doSlot)
 
   const materias = await paginar(rest, `materias?dia=eq.${diaSemana}` +

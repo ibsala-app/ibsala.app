@@ -242,7 +242,7 @@ Deno.test('mapa sem aula no slot não busca matéria nenhuma', async () => {
     diaSemana: 3,
   })
 
-  assertEquals(saida.motivo, 'mapa vazio no slot')
+  assertEquals(saida.motivo, 'sem aulas no slot')
   assertEquals(chamadas.filter((c) => c.includes('materias')).length, 0)
 })
 
@@ -324,4 +324,27 @@ Deno.test('validade do aviso vai até o início da aula mais tardia, com folga',
     agoraMin: 17 * 60 + 10,
   })
   assertEquals(ttls, [105 * 60])
+})
+
+Deno.test('noite2 sem início de aula é normal quando a turma atravessa a noite', async () => {
+  const banco = bancoGrande(1, 1, 1)
+  banco.mapa[0].horario = '18:40/22:30'
+  const { rest } = fakeRest(banco)
+  let envios = 0
+  const dep = { rest, enviar: () => { envios++; return Promise.resolve('enviado' as const) },
+    iso: '2026-10-14', diaSemana: 3 }
+  assertEquals((await executar({ ...dep, slot: 'noite1' })).enviados, 1)
+  assertEquals((await executar({ ...dep, slot: 'noite2' })).motivo, 'sem aulas no slot')
+  assertEquals(envios, 1)
+})
+
+Deno.test('mapa ausente ou totalmente sem horário continua distinguido de slot sem aula', async () => {
+  for (const horario of [null, 'ilegível']) {
+    const banco = bancoGrande(1, 1, 1)
+    banco.mapa = horario === null ? [] : banco.mapa.map((r) => ({ ...r, horario }))
+    const { rest } = fakeRest(banco)
+    const saida = await executar({ rest, enviar: () => { throw Error('não deveria enviar') },
+      slot: 'noite2', iso: '2026-10-14', diaSemana: 3 })
+    assertEquals(saida.motivo, horario === null ? 'mapa vazio' : 'mapa sem horários válidos')
+  }
 })

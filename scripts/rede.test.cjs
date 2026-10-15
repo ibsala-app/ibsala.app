@@ -31,6 +31,7 @@ function ambiente(fetch) {
   vm.runInContext(trecho('async function comTeto', '// Botão que faz rede'), ctx)
   vm.runInContext(`let mapaHoje = [], mapaCarregado = false, salas = [], posHoje = [], cfg = {}, totalAlunos = null, perfil = null;`
     + trecho('let seqAgora =', '// Polling que enxerga'), ctx)
+  vm.runInContext(trecho('function cancelarBusca', 'for (const tela of Object.values(BUSCAS))'), ctx)
   return {ctx, eventos, run: (s) => vm.runInContext(s, ctx)}
 }
 const ok = (body) => new Response(JSON.stringify(body), {headers: {'content-type': 'application/json'}})
@@ -103,4 +104,52 @@ test('timer de pedido concluído não aborta depois do sucesso', async () => {
   a.ctx.abortar = () => {abortou = true}
   assert.equal(await a.run('comTeto(Promise.resolve(42), 10, abortar)'), 42)
   await new Promise((r) => setTimeout(r, 20)); assert.equal(abortou, false)
+})
+
+// Reproduz a sequência do IBSALA-1A: consulta pendurada, home, busca outra vez.
+test('sair da busca cancela fetch e debounce; voltar inicia consulta nova', async () => {
+  let iniciou, abortou = false
+  const inicio = new Promise((r) => { iniciou = r })
+  const a = ambiente(async (_, init) => {
+    iniciou()
+    return new Promise((_, reject) => init.signal.addEventListener('abort', () => {
+      abortou = true; reject(new DOMException('cancelado', 'AbortError'))
+    }, {once: true}))
+  })
+  a.ctx.ctrl = new AbortController()
+  const p = a.run("chamar(sbPublico.from('disciplinas_historico').select('*'), 9000, undefined, ctrl.signal)")
+  await inicio
+  let debounceRodou = false, retomou = 0
+  a.ctx.BUSCAS = {buscar: {seq: 0, ctrl: a.ctx.ctrl,
+    timer: setTimeout(() => {debounceRodou = true}, 10), input: 'busca-input'}}
+  a.ctx.TELAS = ['home', 'buscar']; a.ctx.perfil = null
+  a.ctx.document = {querySelectorAll: () => []}
+  a.run("window.scrollTo = () => {}")
+  a.ctx.history = {pushState() {}}
+  a.ctx.sentry = () => {}
+  a.ctx.buscar = () => {retomou++}
+  a.run("$('tela-home').querySelector = $('tela-buscar').querySelector = () => null; $('busca-input').value = 'calculo'")
+  vm.runInContext(trecho("let telaAtual = 'home'", "document.querySelectorAll('[data-vai]')"), a.ctx)
+  a.run("telaAtual = 'buscar'; mostrar('home')")
+  assert.equal((await p).error.tipo, 'cancelado')
+  assert.equal(abortou, true)
+  assert.equal(a.ctx.BUSCAS.buscar.seq, 1)
+  assert.equal(a.eventos.length, 0)
+  a.run("mostrar('buscar')")
+  assert.equal(retomou, 1)
+  await new Promise((r) => setTimeout(r, 20))
+  assert.equal(debounceRodou, false)
+})
+
+test('timeout persistente de busca ativa continua reportado', async () => {
+  let chamadas = 0
+  const a = ambiente(async (_, init) => {
+    chamadas++
+    return new Promise((_, reject) => init.signal.addEventListener('abort', () =>
+      reject(new DOMException('timeout', 'AbortError')), {once: true}))
+  })
+  const r = await a.run("chamar(sbPublico.from('disciplinas_historico').select('*'), 9000)")
+  assert.equal(r.error.tipo, 'rede')
+  assert.equal(chamadas, 2)
+  assert.equal(a.eventos.length, 1)
 })

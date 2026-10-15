@@ -42,11 +42,10 @@ servir('push-slot', async (req) => {
 
   const { iso, diaSemana, minutos } = hojeBRT()
   const saida = await executar({ rest, enviar, slot, iso, diaSemana, agoraMin: minutos })
-  // O cron só roda em dia útil, então slot sem aula nenhuma no mapa é captura
-  // parada ou cabeçalho trocado (05/10: `Horários`), não dia vazio. Em feriado
-  // isto avisa à toa, uma issue só, que é o preço de não descobrir pelo aluno.
-  if (saida.motivo === 'mapa vazio no slot') {
-    avisar(`push-slot ${slot}: mapa vazio no slot`, 'warning', { slot, iso })
+  // Um slot sem início de aula é normal, inclusive quando a aula das 18:40
+  // atravessa a noite inteira. Falta do mapa ou de horários ainda gera alerta.
+  if (saida.motivo === 'mapa vazio' || saida.motivo === 'mapa sem horários válidos') {
+    avisar(`push-slot ${slot}: ${saida.motivo}`, 'warning', { slot, iso })
   }
   if (saida.falhas) {
     avisar(`push-slot ${slot}: ${saida.falhas} envio(s) falharam`, 'warning', { slot, ...saida })
@@ -66,6 +65,7 @@ servir('push-slot', async (req) => {
         falhas: saida.falhas,
         limpas: saida.limpas,
         alunos: saida.alunos,
+        motivo: saida.motivo ?? null,
       },
     }]),
   }).catch((e) => reportar(e, { etapa: 'marca ultimo_push', slot }))
