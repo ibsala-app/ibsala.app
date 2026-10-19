@@ -54,8 +54,9 @@ export type Analise =
 const CABECALHO = [['SALA'], ['CURSO'], ['', 'TURMA'], ['DISCIPLINA'], ['PROFESSOR A']]
 
 /** Rótulos de sala que significam "não é sala física". O repertório já trata
- *  REMOTO, ONLINE, EAD e HIBRIDO como pseudo-sala desde o v1. */
-const NAO_PRESENCIAL = new Set(['REMOTO', 'ONLINE', 'EAD', 'HIBRIDO', 'HIBRIDA'])
+ *  REMOTO, ONLINE, EAD e HIBRIDO como pseudo-sala desde o v1. LIVE (aula ao
+ *  vivo transmitida) apareceu na pós em 16/10 e alertava 4x por dia (IBSALA-1C). */
+const NAO_PRESENCIAL = new Set(['REMOTO', 'ONLINE', 'EAD', 'HIBRIDO', 'HIBRIDA', 'LIVE'])
 
 /** "DATA:25/08/2026(Terça-Feira)" -> "2026-08-25". Devolve null se não houver
  *  data legível, que é motivo de estado degradado e não de usar hoje. */
