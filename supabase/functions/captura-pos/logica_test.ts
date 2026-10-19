@@ -119,10 +119,11 @@ Deno.test('campo com vírgula entre aspas não parte a linha', () => {
 
 Deno.test('alerta da pós separa salas desconhecidas de remoto e pares conhecidos', () => {
   const a = analisar(`DATA:07/10/2026\n${CABECALHO}\n` + [
-    'Remoto', '302/303', '3L1/3L2', '114 LAB QUIMICA/FISICA',
+    'Remoto', 'LIVE', '302/303', '3L1/3L2', '114 LAB QUIMICA/FISICA',
     'SALA DE REUNIÃO 2', 'Sala desconhecida', '302/999', '',
   ].map((s) => `${s},MBA,20262A,Projeto,Fulano`).join('\n'))
   assert(a.estado === 'ok')
+  assertEquals(a.linhas[1].modalidade, 'remoto')
   assertEquals(salasPendentes(a.linhas), {
     'Sala desconhecida': 1, '302/999': 1, '(sem sala)': 1,
   })
