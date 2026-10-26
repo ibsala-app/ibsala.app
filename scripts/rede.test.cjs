@@ -153,3 +153,18 @@ test('timeout persistente de busca ativa continua reportado', async () => {
   assert.equal(chamadas, 2)
   assert.equal(a.eventos.length, 1)
 })
+
+test('mapa sem rede ou logo após trocar de rede fica no rastro, rede estável vira warning', async () => {
+  const caiu = async () => { throw new TypeError('Load failed') }
+  const falhar = async (a) => {
+    await assert.rejects(a.run('carregarAgora()'), /mapa falhou/)
+    return a.eventos
+  }
+  const offline = ambiente(caiu); offline.ctx.navigator = {onLine: false}
+  assert.equal((await falhar(offline)).length, 0)
+  const trocou = ambiente(caiu); trocou.run('redeMudouEm = Date.now()')
+  assert.equal((await falhar(trocou)).length, 0)
+  const estavel = ambiente(caiu)
+  const [ev] = await falhar(estavel)
+  assert.equal(ev[1].nivel, 'warning')
+})

@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=63'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=64'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -527,6 +527,17 @@ async function ocupado(btn, tarefa) {
 let seqAgora = 0
 let ctrlAgora = null
 
+// Aparelho sem rede, ou que acabou de trocar de rede, não é falha do app. Os três
+// eventos da IBSALA-17 vieram 15 s depois de um `online`, com as duas tentativas
+// estourando o teto, e a IBSALA-S é o iPhone devolvendo "Load failed" na hora.
+// O poll tenta de novo sozinho; fica no rastro e não vira evento.
+const ASSENTAR_REDE_MS = 30 * 1000
+let redeMudouEm = 0
+function redeInstavel() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  return Date.now() - redeMudouEm < ASSENTAR_REDE_MS
+}
+
 // Uma resposta no lugar de quatro.
 //
 // O boot pedia mapa, salas, config e total em quatro requisições e repetia as
@@ -598,12 +609,17 @@ async function carregarAgora({ ghost = false } = {}) {
     }
   } catch (e) {
     if (ctrl.signal.aborted || meu !== seqAgora) return false
-    reportar(e, {
-      extra: { codigo: e?.code, mensagem: e?.message, status: e?.status },
-      msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
-      nivel: e?.message === 'tempo esgotado' ? 'warning' : 'error',
-      chave: `mapa|${e?.code ?? e?.message ?? 'erro'}`,
-    })
+    if (!e?.code && redeInstavel()) {
+      rastro('rede', 'mapa sem rede', { motivo: String(e?.message ?? e) }, 'warning')
+    } else {
+      // sem código é rede, que no `chamar` também é warning; error fica pro servidor
+      reportar(e, {
+        extra: { codigo: e?.code, mensagem: e?.message, status: e?.status },
+        msg: `mapa de hoje não carregou${e?.code ? ` (${e.code})` : ''}`,
+        nivel: e?.code ? 'error' : 'warning',
+        chave: `mapa|${e?.code ?? e?.message ?? 'erro'}`,
+      })
+    }
     if (meu === seqAgora) falhaNoMapa()
     return false
   }
@@ -2389,8 +2405,12 @@ if (!sb) {
     pollAtraso = POLL_BASE   // voltou pro primeiro plano: recomeça no ritmo normal
     agendarPoll()
   })
-  window.addEventListener('offline', () => rastro('rede', 'offline', null, 'warning'))
+  window.addEventListener('offline', () => {
+    redeMudouEm = Date.now()
+    rastro('rede', 'offline', null, 'warning')
+  })
   window.addEventListener('online', () => {
+    redeMudouEm = Date.now()
     rastro('rede', 'online')
     carregarAgora()
     procurarAtualizacao()
