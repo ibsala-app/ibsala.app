@@ -212,3 +212,23 @@ test('último acesso só ganha throttle após sucesso e evita chamadas simultân
   assert.equal(chamadas, 2); assert.equal(dados.size, 1)
   await a.run('tocarUltimoAcesso()'); assert.equal(chamadas, 2)
 })
+
+test('suspender cancela busca e mapa; retomar inicia consultas novas', () => {
+  const a = ambiente(async () => ok([]))
+  let cancelou = 0, mapa = 0, busca = 0
+  a.ctx.document = {hidden: true, addEventListener: (_nome, fn) => {a.ctx.aoMudar = fn}}
+  a.ctx.BUSCAS = {buscar: {input: 'busca-input'}}
+  a.ctx.cancelarBusca = () => {cancelou++}
+  a.ctx.carregarAgora = () => {mapa++}
+  a.ctx.buscar = () => {busca++}
+  a.ctx.procurarAtualizacao = () => {}; a.ctx.agendarPoll = () => {}
+  a.ctx.POLL_BASE = 1
+  a.run("ctrlAgora = new AbortController(); var telaAtual = 'buscar'; var pollAtraso; $('busca-input').value = 'calculo';")
+  vm.runInContext(trecho("  document.addEventListener('visibilitychange', () => {\n    redeMudouEm", "  window.addEventListener('offline'"), a.ctx)
+  a.ctx.aoMudar()
+  assert.equal(a.run('ctrlAgora.signal.aborted'), true)
+  assert.equal(cancelou, 1); assert.equal(mapa, 0)
+  a.ctx.document.hidden = false
+  a.ctx.aoMudar()
+  assert.equal(mapa, 1); assert.equal(busca, 1)
+})

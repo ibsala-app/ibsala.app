@@ -2418,8 +2418,14 @@ if (!sb) {
   setInterval(() => (mapaCarregado ? pintarAgora() : pintarRelogio()), 60 * 1000)
   document.addEventListener('visibilitychange', () => {
     redeMudouEm = Date.now()
-    if (document.hidden) return
+    if (document.hidden) {
+      ctrlAgora?.abort()
+      for (const tela of Object.values(BUSCAS)) cancelarBusca(tela)
+      return
+    }
     carregarAgora()          // PWA retomada não mostra número da véspera
+    const busca = BUSCAS[telaAtual]
+    if (busca) buscar($(busca.input).value.trim(), busca)
     procurarAtualizacao()    // nem versão da véspera
     pollAtraso = POLL_BASE   // voltou pro primeiro plano: recomeça no ritmo normal
     agendarPoll()
