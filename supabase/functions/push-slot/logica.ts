@@ -139,7 +139,6 @@ export function maisRecentePorCodigo(linhas: any[]): Map<string, any> {
  *  lado resolve continua de fora. */
 export function salasDaAula(r: any, rep: Repertorio): string[] {
   if (r.sala_canon) return [r.sala_canon]
-  if (!String(r.sala ?? '').includes('/')) return []
   return ladosDaBarra(String(r.sala), rep)
 }
 

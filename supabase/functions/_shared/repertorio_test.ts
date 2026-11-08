@@ -3,7 +3,7 @@
 // casos que o projeto já pagou caro para aprender, escritos como asserção.
 
 import { assertEquals } from 'jsr:@std/assert@1'
-import { carregarRepertorio, chave, resolverSala } from './repertorio.ts'
+import { carregarRepertorio, chave, ladosDaBarra, resolverSala } from './repertorio.ts'
 import { lerCsv } from './csv.ts'
 
 const rep = carregarRepertorio()
@@ -85,4 +85,13 @@ Deno.test('grafias da quarentena com número de porta explícito (12/10)', () =>
   }
   // Outros rótulos de reunião continuam exigindo revisão.
   assertEquals(resolverSala('SALA DE REUNIÃO 1', rep), [null, 'desconhecida'])
+})
+
+Deno.test('IBSALA-10: lista explícita ocupa todas as 16 portas sem inventar intervalo', () => {
+  const bruta = '105, 106, 107, 109, 110 E 111 - 201, 202, 203, 205, 206, 208, 210, 211, 212 e 213'
+  assertEquals(resolverSala(bruta, rep), [null, 'barra-multipla'])
+  assertEquals(ladosDaBarra(bruta, rep), ['105', '106', '107', '109', '110', '111',
+    '201', '202', '203', '205', '206', '208', '210', '211', '212', '213'])
+  assertEquals(resolverSala('105-111', rep), [null, 'desconhecida'])
+  assertEquals(resolverSala('105, 999', rep), [null, 'desconhecida'])
 })

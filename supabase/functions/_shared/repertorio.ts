@@ -58,9 +58,18 @@ export function carregarRepertorio(rep = repertorioJson as any): Repertorio {
   return { salas, predio: { ...rep.salas }, apelidos, ignoradas }
 }
 
+// Lista explícita de portas, sem inferir intervalos como "105-111".
+export function partesDaSala(bruta: string): string[] {
+  const s = String(bruta).trim()
+  if (/^\d{3}(?:(?:\s*,\s*|\s+E\s+|\s+-\s+)\d{3})+$/i.test(s)) {
+    return s.split(/\s*,\s*|\s+E\s+|\s+-\s+/i)
+  }
+  return s.split('/')
+}
+
 export function ladosDaBarra(bruta: string, rep: Repertorio): string[] {
   const achadas: string[] = []
-  for (const parte of String(bruta).split('/')) {
+  for (const parte of partesDaSala(bruta)) {
     const k = chave(parte)
     if (rep.salas.has(k)) achadas.push(rep.salas.get(k)!)
     else if (rep.apelidos.has(k)) achadas.push(rep.apelidos.get(k)!)
@@ -74,8 +83,9 @@ export function resolverSala(bruta: unknown, rep: Repertorio): [string | null, s
   if (rep.ignoradas.has(k)) return [null, 'ignorada']
   if (rep.salas.has(k)) return [rep.salas.get(k)!, 'canonica']
   if (rep.apelidos.has(k)) return [rep.apelidos.get(k)!, 'apelido']
-  if (k.includes('/')) {
+  if (k.includes('/') || partesDaSala(String(bruta)).length > 1) {
     const lados = ladosDaBarra(String(bruta), rep)
+    if (!k.includes('/') && lados.length !== new Set(partesDaSala(String(bruta))).size) return [null, 'desconhecida']
     if (lados.length === 1) return [lados[0], 'apelido-barra']
     if (lados.length > 1) return [null, 'barra-multipla']
     return [null, 'ignorada']

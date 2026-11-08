@@ -168,3 +168,47 @@ test('mapa sem rede ou logo após trocar de rede fica no rastro, rede estável v
   const [ev] = await falhar(estavel)
   assert.equal(ev[1].nivel, 'warning')
 })
+
+test('PostgREST HTTP 0 é rede, e retomada não vira falha do servidor', async () => {
+  const a = ambiente(async () => { throw new TypeError('Load failed') })
+  const r = await a.run("chamar(sb.rpc('touch_ultimo_acesso'))")
+  assert.equal(r.error.tipo, 'rede')
+  assert.equal(a.eventos[0][1].tags['chamar.tipo'], 'rede')
+  a.run('redeMudouEm = Date.now()')
+  await a.run("chamar(sb.rpc('touch_ultimo_acesso'))")
+  assert.equal(a.eventos.length, 1)
+})
+
+test('página suspensa não reporta timeout; erro HTTP real continua reportado', async () => {
+  const a = ambiente(async () => ok([]))
+  a.ctx.document = {hidden: true}
+  const q = {method: 'POST', then(resolve) {resolve({error: {code: '42501'}, status: 403})}}
+  a.ctx.q = q
+  assert.equal(a.run('redeInstavel()'), true)
+  assert.equal((await a.run('chamar(q)')).error.tipo, 'permissao')
+  assert.equal(a.eventos.length, 1)
+})
+
+test('lista de portas ocupa todas no frontend e não interpreta intervalos', () => {
+  const a = ambiente(async () => ok([]))
+  a.run("salas = ['105','106','107','109','110','111','201','202','203','205','206','208','210','211','212','213'].map(sala => ({sala}))")
+  vm.runInContext(trecho('const chaveSala =', '// Ocupada é sobreposição'), a.ctx)
+  const lista = '105, 106, 107, 109, 110 E 111 - 201, 202, 203, 205, 206, 208, 210, 211, 212 e 213'
+  a.ctx.lista = lista
+  assert.equal(a.run('salasDaLinha({sala: lista}).length'), 16)
+  assert.equal(a.run("salasDaLinha({sala: '105-111'}).length"), 0)
+})
+
+test('último acesso só ganha throttle após sucesso e evita chamadas simultâneas', async () => {
+  const a = ambiente(async () => ok([]))
+  const dados = new Map(); let chamadas = 0
+  a.ctx.localStorage = {getItem: k => dados.get(k), setItem: (k,v) => dados.set(k,v)}
+  a.run("perfil = {id: 'aluno'}")
+  a.ctx.chamar = async () => {chamadas++; return {error: chamadas === 1 ? {tipo: 'rede'} : null}}
+  vm.runInContext(trecho('let toqueEmCurso =', '// ── Push'), a.ctx)
+  await a.run('tocarUltimoAcesso()')
+  assert.equal(dados.size, 0)
+  await a.run('Promise.all([tocarUltimoAcesso(), tocarUltimoAcesso()])')
+  assert.equal(chamadas, 2); assert.equal(dados.size, 1)
+  await a.run('tocarUltimoAcesso()'); assert.equal(chamadas, 2)
+})

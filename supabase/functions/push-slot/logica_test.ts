@@ -348,3 +348,16 @@ Deno.test('mapa ausente ou totalmente sem horário continua distinguido de slot 
     assertEquals(saida.motivo, horario === null ? 'mapa vazio' : 'mapa sem horários válidos')
   }
 })
+
+Deno.test('lista explícita da captura também entra no aviso de sala', async () => {
+  const banco = bancoGrande(1, 1, 1)
+  banco.mapa[0].sala = '105, 106 E 111 - 201, 202'
+  banco.mapa[0].sala_canon = null
+  const { rest } = fakeRest(banco)
+  let titulo = ''
+  const saida = await executar({ rest, enviar: (_s, p: any) => {
+    titulo = p.title; return Promise.resolve('enviado' as const)
+  }, slot: 'manha1', iso: '2026-10-14', diaSemana: 3 })
+  assertEquals(saida.enviados, 1)
+  assertEquals(titulo, 'Salas 105, 106, 111, 201, 202')
+})

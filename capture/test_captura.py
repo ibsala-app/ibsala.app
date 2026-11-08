@@ -260,3 +260,13 @@ def test_python_bate_com_o_golden(rep):
     assert multiplas == golden["multiplas"]
     assert sorted({l["codigo"] for l in linhas if l["codigo"]}) == golden["disciplinas"]
     assert linhas == golden["linhas_detalhe"]
+
+
+def test_lista_explicita_sentry():
+    from capture.captura import carregar_repertorio, resolver_sala, _lados_da_barra
+    rep = carregar_repertorio()
+    bruta = "105, 106, 107, 109, 110 E 111 - 201, 202, 203, 205, 206, 208, 210, 211, 212 e 213"
+    assert resolver_sala(bruta, rep) == (None, "barra-multipla")
+    assert len(_lados_da_barra(bruta, rep)) == 16
+    assert resolver_sala("105-111", rep) == (None, "desconhecida")
+    assert resolver_sala("105, 999", rep) == (None, "desconhecida")

@@ -3,6 +3,7 @@
 // de teste, duplicar significaria duas cópias do setVapidDetails e duas regras
 // diferentes pra inscrição morta.
 import webpush from 'npm:web-push@3.6.7'
+import { avisar } from './sentry.ts'
 import { endpointConhecido } from './push-hosts.ts'
 
 webpush.setVapidDetails(
@@ -64,6 +65,13 @@ export async function enviar(s: Inscricao, payload: unknown, ttl: number = ENTRE
     // `as const` na expressão inteira não compila (TS1355): o tipo vem de cada
     // ramo. Isto nunca foi conferido porque o projeto não tinha Deno instalado
     const morta = e?.statusCode === 404 || e?.statusCode === 410
+    if (!morta) {
+      // Não guardar endpoint, chaves nem corpo da resposta do serviço.
+      avisar('push: serviço recusou ou não respondeu', 'warning', {
+        host: new URL(s.endpoint).hostname, status: e?.statusCode ?? null,
+        tipo: e?.name ?? 'Error', codigo: e?.code ?? null,
+      })
+    }
     return morta ? ('morta' as const) : ('falha' as const)
   }
 }

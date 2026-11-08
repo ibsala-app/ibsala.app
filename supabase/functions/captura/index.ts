@@ -19,7 +19,7 @@
 // reintroduzir o defeito da 114.
 
 import { segredoConfere } from '../_shared/cron.ts'
-import { carregarRepertorio, type Repertorio } from '../_shared/repertorio.ts'
+import { partesDaSala, carregarRepertorio, type Repertorio } from '../_shared/repertorio.ts'
 import { anotarCanonicas, parsear } from './logica.ts'
 import { avisar, servir } from '../_shared/sentry.ts'
 import { hojeBRT } from '../_shared/slots.ts'
@@ -227,7 +227,7 @@ servir('captura', async (req) => {
   // barra com várias salas é normal (o front ocupa todas); o que merece aviso é
   // lado que não casa com sala nenhuma, porque esse lado aparece livre
   const capengas = Object.fromEntries(Object.entries(multiplas ?? {})
-    .filter(([bruta, lados]) => lados.length < bruta.split('/').length))
+    .filter(([bruta, lados]) => lados.length < new Set(partesDaSala(bruta)).size))
   if (Object.keys(capengas).length) {
     avisar('captura: lado de barra sem sala no repertório', 'warning', { capengas })
   }
