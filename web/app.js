@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=64'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=65'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -388,6 +388,8 @@ async function comTeto(p, ms = 9000, aoEstourar) {
 // de "você já tem essa matéria nesse dia", inclusive sessão expirada.
 function erroLegivel(e) {
   const c = e?.code ?? ''
+  // PostgREST devolve falha de transporte como objeto, com HTTP 0.
+  if (e?.status === 0 && !c) return { tipo: 'rede', msg: 'Sem conexão com o servidor. Tenta de novo.' }
   if (c === '23505') return { tipo: 'duplicado', msg: 'Isso já está na sua lista.' }
   // permissão ANTES de sessão: recusa de RLS também chega com 403
   if (c === '42501') return { tipo: 'permissao', msg: 'Sua conta não tem permissão pra isso.' }
@@ -423,6 +425,10 @@ function nomeDaChamada(q, op) {
 }
 
 function reportarChamada(erro, cru, rota, ms) {
+  if (erro.tipo === 'rede' && redeInstavel()) {
+    rastro('rede', 'chamada sem rede', { rota, motivo: String(cru?.message ?? cru) }, 'warning')
+    return
+  }
   reportar(cru instanceof Error ? cru : null, {
     msg: `chamar ${erro.tipo}: ${rota}${cru?.code ? ` (${cru.code})` : ''}`,
     nivel: NIVEL_ERRO[erro.tipo] ?? 'error',
@@ -534,6 +540,7 @@ let ctrlAgora = null
 const ASSENTAR_REDE_MS = 30 * 1000
 let redeMudouEm = 0
 function redeInstavel() {
+  if (typeof document !== 'undefined' && document.hidden) return true
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
   return Date.now() - redeMudouEm < ASSENTAR_REDE_MS
 }
@@ -779,14 +786,18 @@ const livresFora = (ocupadas) => salas.filter((x) =>
 // O codinome entrou em 02/10: desde que a canônica virou o número da porta, os
 // códigos de laboratório são apelido, e "2L1/2L2" deixava 217 e 207 livres com
 // aula dentro (o Sentry pegou pela captura, IBSALA-11).
+// Listas explícitas de portas também ocupam todas, sem expandir intervalos.
 function salasDaLinha(r) {
   if (r.sala_canon) return [r.sala_canon]
-  if (!String(r.sala ?? '').includes('/')) return []
+  const bruta = String(r.sala ?? '').trim()
+  const listaNumerica = /^\d{3}(?:(?:\s*,\s*|\s+E\s+|\s+-\s+)\d{3})+$/i.test(bruta)
+  if (!bruta.includes('/') && !listaNumerica) return []
   const porChave = new Map([
     ...salas.filter((x) => x.codinome).map((x) => [chaveSala(x.codinome), x.sala]),
     ...salas.map((x) => [chaveSala(x.sala), x.sala]),     // canônica ganha do codinome
   ])
-  const achadas = String(r.sala).split('/').map((lado) => {
+  const partes = listaNumerica ? bruta.split(/\s*,\s*|\s+E\s+|\s+-\s+/i) : bruta.split('/')
+  const achadas = partes.map((lado) => {
     const k = chaveSala(lado)
     const p2 = k.match(/^(\d{3}) P2\b/)
     return porChave.get(k) ?? (p2 ? porChave.get(`P2 ${p2[1]}`) : undefined)
@@ -1497,14 +1508,21 @@ async function carregarPerfil() {
 // A 0001 promete "throttle fica no client; smart-write do v1 era 6h" e esse
 // throttle nunca existiu: escrevia a cada evento de auth, inclusive no refresh
 // de token de hora em hora.
-function tocarUltimoAcesso() {
-  const chave = 'ibsala:ultimo-acesso'
+let toqueEmCurso = null
+async function tocarUltimoAcesso() {
+  if (toqueEmCurso) return toqueEmCurso
+  const chave = `ibsala:ultimo-acesso:${perfil.id}`
   try {
     const ultimo = Number(localStorage.getItem(chave) ?? 0)
     if (Date.now() - ultimo < 6 * 60 * 60 * 1000) return
-    localStorage.setItem(chave, String(Date.now()))
-  } catch { /* localStorage bloqueado (navegação privada): toca do mesmo jeito */ }
-  chamar(sb.rpc('touch_ultimo_acesso'))
+  } catch { /* localStorage bloqueado: toca do mesmo jeito */ }
+  toqueEmCurso = (async () => {
+    const { error } = await chamar(sb.rpc('touch_ultimo_acesso'))
+    if (!error) {
+      try { localStorage.setItem(chave, String(Date.now())) } catch { /* sem armazenamento */ }
+    }
+  })()
+  try { await toqueEmCurso } finally { toqueEmCurso = null }
 }
 
 // ── Push (avisos de sala) ────────────────────────────────────────────────────
@@ -2399,8 +2417,15 @@ if (!sb) {
   agendarPoll()
   setInterval(() => (mapaCarregado ? pintarAgora() : pintarRelogio()), 60 * 1000)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return
+    redeMudouEm = Date.now()
+    if (document.hidden) {
+      ctrlAgora?.abort()
+      for (const tela of Object.values(BUSCAS)) cancelarBusca(tela)
+      return
+    }
     carregarAgora()          // PWA retomada não mostra número da véspera
+    const busca = BUSCAS[telaAtual]
+    if (busca) buscar($(busca.input).value.trim(), busca)
     procurarAtualizacao()    // nem versão da véspera
     pollAtraso = POLL_BASE   // voltou pro primeiro plano: recomeça no ritmo normal
     agendarPoll()

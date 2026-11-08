@@ -132,10 +132,18 @@ def carregar_repertorio(caminho=REPERTORIO_PATH):
     }
 
 
+def _partes_da_sala(bruta):
+    s = str(bruta).strip()
+    separador = r"\s*,\s*|\s+E\s+|\s+-\s+"
+    if re.fullmatch(r"\d{3}(?:(?:" + separador + r")\d{3})+", s, re.I):
+        return re.split(separador, s, flags=re.I)
+    return s.split("/")
+
+
 def _lados_da_barra(bruta, rep):
     """Rótulo com barra -> lista de canônicas que cada lado resolve."""
     achadas = []
-    for parte in str(bruta).split("/"):
+    for parte in _partes_da_sala(bruta):
         k = _chave(parte)
         if k in rep["salas"]:
             achadas.append(rep["salas"][k])
@@ -161,12 +169,14 @@ def resolver_sala(bruta, rep):
         return rep["salas"][k], "canonica"
     if k in rep["apelidos"]:
         return rep["apelidos"][k], "apelido"
-    if "/" in k:
+    if "/" in k or len(_partes_da_sala(bruta)) > 1:
         # Antes: barra = par concatenado ("302/303"), erro da origem, não ocupa
         # nada. Só que existe rótulo com barra onde UM lado é sala de verdade
         # ("207 (P2) LAB.PROJETOS ELETRICOS/206 (P2)", visto em 12/08): jogar o
         # rótulo inteiro fora deixava a P2-206 livre com aula dentro.
         lados = _lados_da_barra(bruta, rep)
+        if "/" not in k and len(lados) != len(set(_partes_da_sala(bruta))):
+            return None, "desconhecida"
         if len(lados) == 1:
             return lados[0], "apelido-barra"
         if len(lados) > 1:
