@@ -1,7 +1,7 @@
 // `?v=` no import também: a query do `<script>` não é herdada pelo import
 // estático, e config.js carrega a chave VAPID. O número acompanha o CACHE do
 // sw.js e é verificado por scripts/versao.py.
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=65'
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY } from './config.js?v=66'
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 // O init mora em sentry.js. Aqui ficam os três jeitos de o app falar com ele.
@@ -442,7 +442,12 @@ function reportarChamada(erro, cru, rota, ms) {
   })
 }
 
-async function chamar(q, ms = 9000, op, sinal) {
+// `repete` e `quieto` são pra escrita idempotente e sem tela, que hoje é só o
+// `touch_ultimo_acesso`: gravar a mesma hora duas vezes não duplica nada, e
+// quando a rede não entrega o aluno não vê nem perde coisa alguma, porque o
+// próximo evento de auth tenta de novo. Um teto estourado ali virava evento
+// (IBSALA-1P, iPhone, uma vez). Recusa do servidor continua reportada.
+async function chamar(q, ms = 9000, op, sinal, { repete = false, quieto = false } = {}) {
   const rota = nomeDaChamada(q, op)
   const cancelado = () => ({ data: null, error: { tipo: 'cancelado' } })
   if (sinal?.aborted) return cancelado()
@@ -472,7 +477,7 @@ async function chamar(q, ms = 9000, op, sinal) {
   // de fora: o supabase-js já repete GET três vezes sozinho (1, 2 e 4 s), e
   // repetir por cima dobrava a espera até o erro, de 7 pra 14 s. Escrita não
   // entra: é a linha duplicada do parágrafo de cima.
-  const leitura = !op && (q?.method ?? 'GET') === 'GET'
+  const leitura = repete || (!op && (q?.method ?? 'GET') === 'GET')
 
   let r
   try {
@@ -497,7 +502,8 @@ async function chamar(q, ms = 9000, op, sinal) {
   } catch (e) {
     if (sinal?.aborted) return cancelado()
     const erro = { tipo: 'rede', msg: 'Sem resposta do servidor. Tenta de novo.' }
-    reportarChamada(erro, e, rota, ms)
+    if (quieto) rastro('rede', 'chamada de fundo sem resposta', { rota, motivo: String(e?.message ?? e) }, 'warning')
+    else reportarChamada(erro, e, rota, ms)
     return { data: null, error: erro }
   }
   if (sinal?.aborted) return cancelado()
@@ -1517,7 +1523,8 @@ async function tocarUltimoAcesso() {
     if (Date.now() - ultimo < 6 * 60 * 60 * 1000) return
   } catch { /* localStorage bloqueado: toca do mesmo jeito */ }
   toqueEmCurso = (async () => {
-    const { error } = await chamar(sb.rpc('touch_ultimo_acesso'))
+    const { error } = await chamar(sb.rpc('touch_ultimo_acesso'), 9000, undefined, undefined,
+      { repete: true, quieto: true })
     if (!error) {
       try { localStorage.setItem(chave, String(Date.now())) } catch { /* sem armazenamento */ }
     }

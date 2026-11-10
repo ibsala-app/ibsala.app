@@ -232,3 +232,31 @@ test('suspender cancela busca e mapa; retomar inicia consultas novas', () => {
   a.ctx.aoMudar()
   assert.equal(mapa, 1); assert.equal(busca, 1)
 })
+
+// IBSALA-1P: o toque de último acesso estourou o teto uma vez num iPhone e virou evento.
+test('último acesso repete no teto, fica no rastro se a rede não entrega e reporta recusa', async () => {
+  const pendura = (init) => new Promise((_, reject) => init.signal.addEventListener('abort', () =>
+    reject(new DOMException('timeout', 'AbortError')), {once: true}))
+  const montar = (fetch) => {
+    const a = ambiente(fetch); const dados = new Map()
+    a.ctx.localStorage = {getItem: k => dados.get(k), setItem: (k, v) => dados.set(k, v)}
+    a.run("perfil = {id: 'aluno'}")
+    vm.runInContext(trecho('let toqueEmCurso =', '// ── Push'), a.ctx)
+    return {a, dados}
+  }
+  let n = 0
+  const passa = montar(async (_, init) => (++n === 1 ? pendura(init) : ok(null)))
+  await passa.a.run('tocarUltimoAcesso()')
+  assert.equal(n, 2); assert.equal(passa.dados.size, 1); assert.equal(passa.a.eventos.length, 0)
+
+  let m = 0
+  const cai = montar(async (_, init) => { m++; return pendura(init) })
+  await cai.a.run('tocarUltimoAcesso()')
+  assert.equal(m, 2); assert.equal(cai.dados.size, 0); assert.equal(cai.a.eventos.length, 0)
+
+  const recusa = montar(async () => new Response(JSON.stringify({code: '42501', message: 'negado'}),
+    {status: 403, headers: {'content-type': 'application/json'}}))
+  await recusa.a.run('tocarUltimoAcesso()')
+  assert.equal(recusa.dados.size, 0); assert.equal(recusa.a.eventos.length, 1)
+  assert.equal(recusa.a.eventos[0][1].tags['chamar.tipo'], 'permissao')
+})
